@@ -173,6 +173,30 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
   UI proxy; traversal blocked.
 - **Reversibility**: high.
 
+## D-13 — Voice = third gateway channel (OpenAI-style /v1/audio/speech); honest stub for offline E2E
+
+- **Decision**: TTS uses OmniRoute's OpenAI-compatible audio channel
+  (`POST /v1/audio/speech`, `{model, input, voice, format}` → raw audio body),
+  not the text channel. The Voice Agent writes per-scene narration WAVs to
+  `backend/assets/{contentId}/audio/` and persists a JSON `voice` manifest;
+  served at `GET /api/assets/{contentId}/audio/{file}` (same guarded route).
+- **Alternatives**: forcing speech through text/chat channels (impossible —
+  response is binary audio). Multi-character voices deferred (narration-first
+  MVP).
+- **Reason**: same pattern as D-12 (JSON-only DB, disk-hosted binaries), and it
+  keeps "provider-swappable" trivially true (Decision D-25 adapter).
+- **Trade-offs**: a third channel + disk storage + a static subdir; files are
+  machine-local. **Known env blocker**: the NVIDIA TTS NIM backing
+  `nvidia/fastpitch` is down (no port :9000, no Docker to host it), so live TTS
+  synthesis is **UNPROVEN**; `OMNIROUTE_TTS_STUB=1` synthesizes a playable local
+  WAV to exercise the full pipeline/file/serve/UI path in E2E. The call contract
+  itself is verified against OmniRoute docs + probes.
+- **Status**: IMPLEMENTED (Phase 6, `AICF-007`) — `gateway/audio.ts`, `voice`
+  agent, `voice` artifact, frontend `<audio>` players. Pipeline E2E-verified with
+  stub WAV (valid RIFF/WAVE 22050Hz 16-bit; served `audio/wav`); **live neural
+  TTS pending the NVIDIA NIM upstream**.
+- **Reversibility**: high.
+
 ---
 
 ## Environment findings feeding decisions

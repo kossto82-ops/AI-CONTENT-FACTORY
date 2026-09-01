@@ -517,6 +517,26 @@ function ContentCard({
               ))}
             </div>
           )}
+          {c.audioScenes && c.audioScenes.length > 0 && (
+            <div className="mt-3 space-y-1">
+              {c.audioScenes.map((s) => (
+                <div key={s.sceneId} className="flex items-center gap-2">
+                  <span className="w-24 shrink-0 truncate font-mono text-[11px] text-slate-500">
+                    {s.sceneId}
+                    {s.durationSeconds ? ` · ${s.durationSeconds}s` : ''}
+                  </span>
+                  <audio
+                    controls
+                    preload="none"
+                    className="h-8 w-64 max-w-full"
+                    src={`/api/assets/${c.id}/audio/${s.file}`}
+                  >
+                    <source src={`/api/assets/${c.id}/audio/${s.file}`} type={s.mime} />
+                  </audio>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone={toneForStatus(c.status)}>{c.status}</Badge>

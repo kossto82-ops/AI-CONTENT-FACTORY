@@ -162,12 +162,17 @@ const routes: Route[] = [
         const assetManifest = assetsArt
           ? (safeParse(assetsArt.payload) as { scenes?: { sceneId: string; file: string }[] } | null)
           : null;
+        const audioArt = artifactRepo.latest(c.id, 'voice');
+        const audioManifest = audioArt
+          ? (safeParse(audioArt.payload) as { scenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[] } | null)
+          : null;
         return {
           ...base,
           planVersion: planArt?.version ?? 0,
           latestQa: qa ? { status: qa.status, score: qa.score, issues: qa.issues } : null,
           revisable: qa?.status === 'rejected' && !!planArt,
           assetScenes: assetManifest?.scenes ?? [],
+          audioScenes: audioManifest?.scenes ?? [],
         };
       });
       sendJson(res, 200, { content });
@@ -218,8 +223,13 @@ const routes: Route[] = [
     async handler(m, _req, res) {
       const contentId = decodeURIComponent(m[1]!);
       const file = decodeURIComponent(m[2]!);
-      // Prevent path traversal outside the content's asset dir.
-      if (/\.\./.test(file) || !/^[\w.\- ]+$/.test(file)) {
+      // Prevent path traversal outside the content's asset dir. Allow one
+      // optional subdirectory segment (e.g. "audio/<file>.wav") and no "..".
+      if (
+        /\.\./.test(file) ||
+        !/^[\w.\- ]+(\/[\w.\- ]+)?$/.test(file) ||
+        !/^[\w.\- ]+$/.test(contentId)
+      ) {
         return sendJson(res, 400, { error: 'invalid asset path' });
       }
       const abs = join(ASSETS_ROOT, contentId, file);
@@ -227,7 +237,14 @@ const routes: Route[] = [
         const data = await readFile(abs);
         const ext = file.split('.').pop()?.toLowerCase();
         const mime =
-          ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+          ext === 'png' ? 'image/png' :
+          ext === 'webp' ? 'image/webp' :
+          ext === 'gif' ? 'image/gif' :
+          ext === 'wav' ? 'audio/wav' :
+          ext === 'mp3' ? 'audio/mpeg' :
+          ext === 'ogg' ? 'audio/ogg' :
+          ext === 'flac' ? 'audio/flac' :
+          'image/jpeg';
         res.writeHead(200, { 'content-type': mime, 'cache-control': 'public, max-age=3600' });
         res.end(data);
       } catch {
@@ -374,6 +391,8 @@ function agentDefaultMode(type: string): AgentMode {
   switch (type) {
     case 'research':
     case 'qa':
+    case 'visual':
+    case 'voice':
       return 'AUTOMATIC';
     default:
       return 'SEMI_AUTOMATIC';

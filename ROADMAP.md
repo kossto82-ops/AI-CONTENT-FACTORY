@@ -64,9 +64,20 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
   (scene -> file), served at `GET /api/assets/{contentId}/{file}`; UI shows thumbnails.
 - Video-gen ready (veo/seedance) for Phase 7. No vision QA here (deferred to Phase 8).
 
-## Phase 6 — Voice
-- Voice Agent: narration + character voices (TTS via OmniRoute), audio,
-  sync. Provider-swappable.
+## Phase 6 — Voice (DONE, `AICF-007`; live TTS synthesis UNPROVEN)
+- Voice Agent: per-scene narration audio from the ProductionPlan's `narration`
+  text, via a new **audio-only gateway channel** (OmniRoute OpenAI-style
+  `POST /v1/audio/speech`).
+- Saves WAV to `backend/assets/{contentId}/audio/`, persists a `voice` JSON
+  manifest (scene -> file/mime/duration), served at `GET
+  /api/assets/{contentId}/audio/{file}`; UI plays each clip.
+- Provider-swappable (adapter sits behind the Gateway, Decision D-25).
+- **Caveat**: the backing NVIDIA TTS NIM (`nvidia/fastpitch`) upstream is
+  currently DOWN (only OmniRoute :20128 listens; no NIM on :9000; no Docker to
+  host one). The channel + full pipeline/file-write/serve/UI path is
+  E2E-verified with a deterministic local WAV generator (`OMNIROUTE_TTS_STUB=1`),
+  so pipeline wiring is proven; **live neural TTS stays UNPROVEN** until the NIM
+  is available.
 
 ## Phase 7 — Assembly
 - Video Assembly Agent: compose scenes/images/clips/voice/music/subtitles/

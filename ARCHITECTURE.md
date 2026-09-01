@@ -1,8 +1,9 @@
 # AI Content Factory — Architecture
 
-Status: PROPOSED (Phase 5). Control Center + configurable pipeline modes +
-Director revision loop + Visual Agent (FLUX image generation, asset store).
-E2E-verified against live gateway.
+Status: PROPOSED (Phase 6). Control Center + configurable pipeline modes +
+Director revision loop + Visual Agent (FLUX image generation, asset store) +
+Voice Agent (TTS narration audio, audio store). E2E-verified against live
+gateway (voice: file/pipeline path with stub synth; neural TTS pending NIM).
 
 ## 1. Purpose
 
@@ -161,6 +162,23 @@ step is persisted and versioned before the next step reads it.
   mime, bytes) is persisted as the artifact — the DB stays JSON-only; binaries live
   on disk (gitignored) and are served at `GET /api/assets/{contentId}/{file}`
   (path-traversal guarded).
+
+### 8.2 Audio channel (Voice Agent)
+
+- TTS is a THIRD gateway channel: OmniRoute exposes an OpenAI-compatible Audio
+  Speech API (`POST /v1/audio/speech`, body `{model, input, voice, format}`)
+  returning a raw audio body (`audio/wav` / `audio/mpeg`). Implemented as
+  `gateway/audio.ts` (`callOmniRouteSpeech`).
+- Default model `nvidia/fastpitch`, default voice `Magpie-Multilingual.EN-US.Aria`,
+  default format `wav` (universal browser playback).
+- The Voice Agent generates one narration clip per scene from the
+  ProductionPlan's `narration` text, writes binaries to
+  `backend/assets/{contentId}/audio/`, persists a JSON `voice` manifest
+  (scene -> file/mime/durationSeconds/text) as the artifact, and serves files at
+  `GET /api/assets/{contentId}/audio/{file}` (same traversal-guarded route).
+- Offline dev mode `OMNIROUTE_TTS_STUB=1` returns a locally synthesized playable
+  WAV (sine "voice") so the pipeline/file-write/serving path can be exercised
+  when the TTS upstream is down; it is NOT live TTS.
 
 ## 9. Orchestration
 

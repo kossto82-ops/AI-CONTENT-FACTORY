@@ -38,6 +38,7 @@ export interface Content {
   latestQa?: { status: string; score: number; issues: QaIssue[] } | null;
   revisable?: boolean;
   assetScenes?: { sceneId: string; file: string }[];
+  audioScenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[];
 }
 
 export interface Approval {

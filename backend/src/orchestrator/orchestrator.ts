@@ -56,6 +56,11 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
       if (!planArt) throw new Error('No production plan for visual');
       return { plan: safeJson(planArt.payload), contentId: content.id };
     }
+    case 'voice': {
+      const planArt = latestArtefact(content.id, 'production_plan');
+      if (!planArt) throw new Error('No production plan for voice');
+      return { plan: safeJson(planArt.payload), contentId: content.id };
+    }
   }
 }
 
@@ -543,6 +548,8 @@ function stageFor(agent: AgentType): import('../domain/types.js').ContentStatus 
       return 'DIRECTED';
     case 'visual':
       return 'PRODUCING';
+    case 'voice':
+      return 'PRODUCING';
     case 'qa':
       return 'QA';
   }
@@ -559,6 +566,8 @@ function defaultArtifactKind(agent: AgentType): string | undefined {
       return 'production_plan';
     case 'visual':
       return 'assets';
+    case 'voice':
+      return 'voice';
     case 'qa':
       return 'qa';
   }
@@ -575,6 +584,8 @@ function defaultApprovalKind(agent: AgentType): string {
       return 'plan';
     case 'visual':
       return 'asset';
+    case 'voice':
+      return 'audio';
     case 'qa':
       return 'video';
   }

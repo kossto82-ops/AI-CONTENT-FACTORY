@@ -42,11 +42,12 @@ OmniRoute must be reachable. Default tasks route to `auto/*` combos.
 ## Brain-first pipeline
 
 ```
-Research -> [APPROVE ideas] -> Script -> [APPROVE] -> Director -> [APPROVE] -> Visual -> QA
+Research -> [APPROVE ideas] -> Script -> [APPROVE] -> Director -> [APPROVE] -> Visual -> Voice -> QA
 ```
 
-Each creative step halts for human approval (SEMI-AUTOMATIC); Visual and QA run
-AUTOMATIC. Jobs, approvals, artifacts and cost are persisted and recoverable.
+Each creative step halts for human approval (SEMI-AUTOMATIC); Visual, Voice and
+QA run AUTOMATIC. Jobs, approvals, artifacts and cost are persisted and
+recoverable.
 
 ## Visual Agent (Phase 5)
 
@@ -56,6 +57,23 @@ OpenAI-compatible Images API. Images are saved to `backend/assets/{contentId}/`
 (gitignored), a JSON `assets` manifest is persisted as an artifact, and files are
 served at `GET /api/assets/{contentId}/{file}`. The Content tab renders scene
 thumbnails.
+
+## Voice Agent (Phase 6)
+
+After Visual, the **Voice Agent** synthesizes one narration clip per scene from
+the ProductionPlan (`narration` text) via OmniRoute's OpenAI-compatible
+`POST /v1/audio/speech` (model `nvidia/fastpitch`, voice
+`Magpie-Multilingual.EN-US.Aria`, WAV). Files live under
+`backend/assets/{contentId}/audio/` (gitignored), a JSON `voice` manifest is
+persisted as an artifact, and clips are served at
+`GET /api/assets/{contentId}/audio/{file}` with playback controls in the Content
+tab.
+
+> **Live TTS status:** the NVIDIA TTS NIM upstream is currently unavailable, so
+> neural TTS synthesis is UNPROVEN. Set `OMNIROUTE_TTS_STUB=1` to run the
+> pipeline with a locally synthesized (sine) WAV and verify the full
+> file/write/serve/UI path. The `nvidia/fastpitch` → `POST /v1/audio/speech`
+> contract is verified against OmniRoute's docs.
 
 ## Execution modes (per step)
 
