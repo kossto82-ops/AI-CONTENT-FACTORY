@@ -197,6 +197,63 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
   TTS pending the NVIDIA NIM upstream**.
 - **Reversibility**: high.
 
+## D-14 — Assembly = reproducible composition DATA (no muxer in MVP; no-ffmpeg)
+
+- **Decision**: There is no ffmpeg in this environment (Phase 0 audit), so the
+  Video Assembly Agent (Phase 7) produces a **reproducible composition**: a JSON
+  `FinalVideoManifest` (Decision D-12/D-13 pattern — DB stays JSON-only, binaries
+  on disk) that is an exact timeline (per-scene cue windows summing to the plan
+  total, layer references to visual/voice/clip files), plus a `subtitles.vtt`
+  track and poster; the Control Center renders it in-browser. A real muxed MP4
+  (export) is explicitly deferred to a future render backend (Remotion/ffmpeg).
+- **Alternatives**: shelling out to ffmpeg to concat clips (not installed; would
+  block the phase on a non-MVP tool), or storing a rendered MP4 blob
+  (non-reproducible, not JSON-servable).
+- **Reason**: "final video (reproducible)" per PRODUCT.md is satisfied as
+  composition-data + per-scene clips (GIF/MP4/WebM) + caption + poster; every
+  artifact is deterministic given the same plan+assets+voice inputs, so the
+  output is verifiable bit-for-bit (unit-tested).
+- **Trade-offs**: no single downloadable .mp4 in the MVP; the player composes
+  clips/images/audio; export is a follow-up. The scene->file index stays
+  queryable and the whole pipeline/file-write/serve/UI path is exercisable.
+- **Status**: IMPLEMENTED (Phase 7, `AICF-008`) — `gateway/video.ts`, `assembly`
+  agent, `video` artifact, `GET /api/assets/{contentId}/assembly/{file}`, UI
+  preview player. E2E-verified with stub clips (fresh DB, full brain-first
+  pipeline -> assembly -> QA): 4 CLI-like scenes, 30s normalized timeline, 4
+  animated-GIF clips (GIF89a, ~216KB), `subtitles.vtt` (text/vtt), poster served.
+- **Reversibility**: high.
+
+## D-15 — Video = fourth gateway channel (OpenAI-style /v1/videos/generations); honest stub default
+
+- **Decision**: Video clip generation uses OmniRoute's OpenAI-compatible video
+  channel (`POST /v1/videos/generations`, `{model, prompt, n, size}` →
+  `data[0].b64_json`/`url`), defaulting to the `veo-free/veo` model (VEO 3.1,
+  verified in the live video-model catalog). Same pattern as D-13: the channel
+  **defaults to `OMNIROUTE_VIDEO_STUB` = on**, producing a deterministic,
+  browser-playable animated GIF per scene (pure-Node GIF89a encoder with a
+  non-compressing LZW stream), and calls the real gateway only when the operator
+  opts in with `OMNIROUTE_VIDEO_STUB=0`.
+- **Alternatives**: forcing video through image/text channels (impossible —
+  different response shape), or always-live (live veo/seedance generations are
+  queued and slow — probes timed out, see Status).
+- **Reason**: identical honesty to D-13 — pipeline wiring, file writes, serving,
+  and the UI player must stay E2E-verifiable without burning minutes per clip on
+  a flaky upstream. Live MP4/WebM output is **UNPROVEN** until the upstream
+  proves stable.
+- **Trade-offs**: an extra channel + a local stub generator; stub clips are
+  motion-band GIFs, not neural video (acceptable placeholder for the phase
+  goal — a reproducible, downloadable-and-playable clip layer).
+- **Status**: IMPLEMENTED (Phase 7, `AICF-008`) — `gateway/video.ts`,
+  `buildStubClip`/`gifLzwEncode`, assembly wiring. Pipeline E2E-verified with
+  stub GIFs. **Live probes (2026-09-01):** `veo-free/veo` did not return within
+  240s; `veo-free/seedance`, `veoaifree-web/veo`, `veoaifree-web/seedance` each
+  did not return within 150s — all four video models in the live catalog
+  (`GET /v1/models` and `GET /v1/videos/generations`) hang, same class as the
+  TTS NIM. The live path therefore has a hard 120s timeout that fails the job
+  cleanly (retryable) instead of hanging the pipeline; live generation stays
+  gated behind `OMNIROUTE_VIDEO_STUB=0` until the upstream answers.
+- **Reversibility**: high.
+
 ---
 
 ## Environment findings feeding decisions

@@ -11,7 +11,7 @@ video rendering.
 | `ARCHITECTURE.md` | Components, layers, data flow, model gateway, orchestration |
 | `PRODUCT.md` | Vision, users, agents, pipelines, HITL, lifecycle |
 | `DECISIONS.md` | Technical decisions + trade-offs; what we deliberately do NOT need |
-| `ROADMAP.md` | Phase 0..11 plan (Phases 1-3 done; Phase 4: Director revision loop; Phase 5: Visual Agent) |
+| `ROADMAP.md` | Phase 0..11 plan (Phases 1-7 done; Phase 8: QA; Phase 9: Publisher) |
 
 ## Stack (MVP)
 
@@ -42,12 +42,12 @@ OmniRoute must be reachable. Default tasks route to `auto/*` combos.
 ## Brain-first pipeline
 
 ```
-Research -> [APPROVE ideas] -> Script -> [APPROVE] -> Director -> [APPROVE] -> Visual -> Voice -> QA
+Research -> [APPROVE ideas] -> Script -> [APPROVE] -> Director -> [APPROVE] -> Visual -> Voice -> Assembly -> QA
 ```
 
-Each creative step halts for human approval (SEMI-AUTOMATIC); Visual, Voice and
-QA run AUTOMATIC. Jobs, approvals, artifacts and cost are persisted and
-recoverable.
+Each creative step halts for human approval (SEMI-AUTOMATIC); Visual, Voice,
+Assembly and QA run AUTOMATIC. Jobs, approvals, artifacts and cost are
+persisted and recoverable.
 
 ## Visual Agent (Phase 5)
 
@@ -74,6 +74,24 @@ tab.
 > pipeline with a locally synthesized (sine) WAV and verify the full
 > file/write/serve/UI path. The `nvidia/fastpitch` → `POST /v1/audio/speech`
 > contract is verified against OmniRoute's docs.
+
+## Video Assembly Agent (Phase 7)
+
+After Voice, the **Video Assembly Agent** composes the ProductionPlan + Visual +
+Voice manifests into a reliable, reproducible final video. No ffmpeg exists in
+this environment (Decision D-14), so "final video" is **composition data**: a
+`FinalVideoManifest` `video` artifact — exact per-scene timeline normalized to
+the plan total, per-scene `clipFile`/`visualFile`/`voiceFile` layer references,
+resolution `768x1344` 9:16, `subtitles.vtt` captions, poster — plus per-scene
+motion clips written to `backend/assets/{contentId}/assembly/`. The Content tab
+renders it with a preview player (clips/images/captions/voice, scene dots,
+Play/Pause). A real muxed MP4 export is deferred to a render backend.
+
+> **Live video status:** live veo/seedance clip generation is UNPROVEN (probe:
+> queued, >20s). The channel defaults to `OMNIROUTE_VIDEO_STUB=1`, which
+> synthesizes a deterministic animated GIF per scene (pure-Node GIF89a) so the
+> full pipeline/file/serve/UI path is E2E-verified. Set `OMNIROUTE_VIDEO_STUB=0`
+> to call the real `POST /v1/videos/generations` channel.
 
 ## Execution modes (per step)
 

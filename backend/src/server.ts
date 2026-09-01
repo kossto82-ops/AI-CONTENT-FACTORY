@@ -166,6 +166,8 @@ const routes: Route[] = [
         const audioManifest = audioArt
           ? (safeParse(audioArt.payload) as { scenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[] } | null)
           : null;
+        const videoArt = artifactRepo.latest(c.id, 'video');
+        const assemblyManifest = videoArt ? safeParse(videoArt.payload) : null;
         return {
           ...base,
           planVersion: planArt?.version ?? 0,
@@ -173,6 +175,7 @@ const routes: Route[] = [
           revisable: qa?.status === 'rejected' && !!planArt,
           assetScenes: assetManifest?.scenes ?? [],
           audioScenes: audioManifest?.scenes ?? [],
+          assemblyManifest,
         };
       });
       sendJson(res, 200, { content });
@@ -239,12 +242,17 @@ const routes: Route[] = [
         const mime =
           ext === 'png' ? 'image/png' :
           ext === 'webp' ? 'image/webp' :
+          ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
           ext === 'gif' ? 'image/gif' :
           ext === 'wav' ? 'audio/wav' :
           ext === 'mp3' ? 'audio/mpeg' :
           ext === 'ogg' ? 'audio/ogg' :
           ext === 'flac' ? 'audio/flac' :
-          'image/jpeg';
+          ext === 'mp4' ? 'video/mp4' :
+          ext === 'webm' ? 'video/webm' :
+          ext === 'mov' ? 'video/quicktime' :
+          ext === 'vtt' ? 'text/vtt' :
+          'application/octet-stream';
         res.writeHead(200, { 'content-type': mime, 'cache-control': 'public, max-age=3600' });
         res.end(data);
       } catch {
@@ -393,6 +401,7 @@ function agentDefaultMode(type: string): AgentMode {
     case 'qa':
     case 'visual':
     case 'voice':
+    case 'assembly':
       return 'AUTOMATIC';
     default:
       return 'SEMI_AUTOMATIC';

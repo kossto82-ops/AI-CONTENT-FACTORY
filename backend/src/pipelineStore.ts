@@ -8,6 +8,12 @@ import type { AgentMode, ApprovalKind } from './domain/types.js';
  * pipeline definition lives in the `pipeline` table as JSON; operators can
  * tweak per-step mode (MANUAL / SEMI_AUTOMATIC / AUTOMATIC) and approval gates
  * from the Control Center. Falls back to DEFAULT_PIPELINE when nothing stored.
+ *
+ * Stored definitions are RECONCILED against the canonical DEFAULT_PIPELINE on
+ * load: newly added code-backed steps (e.g. assembly in Phase 7) are injected
+ * in canonical order while operator overrides on existing steps are preserved,
+ * so dev DBs seeded before a step existed get the full pipeline without
+ * clobbering human tweaks.
  */
 
 interface PipelineConfig {
@@ -16,20 +22,45 @@ interface PipelineConfig {
 
 const DEFINITION_KEY = 'steps';
 
+/**
+ * Merge a stored definition into the canonical default: keep operator
+ * overrides per agent, inject any missing code-backed steps, append custom
+ * steps the operator added.
+ */
+function reconcile(stored: PipelineDefinition): PipelineDefinition {
+  if (stored.id !== DEFAULT_PIPELINE.id) return stored;
+  const storedSteps = new Map(stored.steps.map((s) => [s.agent, s]));
+  const merged: PipelineStep[] = DEFAULT_PIPELINE.steps.map((cs) => {
+    const ss = storedSteps.get(cs.agent);
+    if (!ss) return { ...cs };
+    const m: PipelineStep = { ...cs };
+    if (ss.mode !== undefined) m.mode = ss.mode;
+    if (ss.requiresApproval !== undefined) m.requiresApproval = ss.requiresApproval;
+    if (ss.approvalKind !== undefined) m.approvalKind = ss.approvalKind;
+    return m;
+  });
+  const known = new Set(merged.map((s) => s.agent));
+  const extras = stored.steps
+    .filter((s) => !known.has(s.agent))
+    .sort((a, b) => a.order - b.order)
+    .map((s, i) => ({ ...s, order: merged.length + i + 1 }));
+  return { id: DEFAULT_PIPELINE.id, name: DEFAULT_PIPELINE.name, steps: [...merged, ...extras] };
+}
+
 function toPipeline(row: {
   id: string;
   name: string;
   definition: string;
 }): PipelineDefinition {
+  let parsed: PipelineStep[] | undefined;
   try {
     const cfg = JSON.parse(row.definition) as PipelineConfig;
-    if (Array.isArray(cfg.steps)) {
-      return { id: row.id, name: row.name, steps: cfg.steps };
-    }
+    if (Array.isArray(cfg.steps)) parsed = cfg.steps;
   } catch {
     // fall through to default
   }
-  return { id: row.id, name: row.name, steps: DEFAULT_PIPELINE.steps };
+  if (!parsed) return { id: row.id, name: row.name, steps: DEFAULT_PIPELINE.steps };
+  return reconcile({ id: row.id, name: row.name, steps: parsed });
 }
 
 function upsert(id: string, name: string, definition: string): void {
@@ -54,7 +85,15 @@ export function loadPipeline(id: string = DEFAULT_PIPELINE.id): PipelineDefiniti
     upsert(DEFAULT_PIPELINE.id, DEFAULT_PIPELINE.name, JSON.stringify({ steps: DEFAULT_PIPELINE.steps }));
     return { id: DEFAULT_PIPELINE.id, name: DEFAULT_PIPELINE.name, steps: DEFAULT_PIPELINE.steps };
   }
-  return toPipeline(row);
+  const result = toPipeline(row);
+  // Persist the reconciled definition so it wins over the stale stored row.
+  if (result.id === DEFAULT_PIPELINE.id) {
+    const reconciled = JSON.stringify({ steps: result.steps });
+    if (reconciled !== row.definition) {
+      upsert(result.id, result.name, reconciled);
+    }
+  }
+  return result;
 }
 
 /** List all stored pipeline headers (no full definitions). */

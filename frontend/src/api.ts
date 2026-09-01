@@ -25,6 +25,45 @@ export interface QaIssue {
   message: string;
 }
 
+export interface FinalVideoScene {
+  sceneId: string;
+  startSec: number;
+  endSec: number;
+  visualFile: string;
+  voiceFile: string;
+  clipFile: string;
+  clipMime: string;
+  clipBytes: number;
+  narration: string;
+}
+
+export interface AssemblyManifest {
+  videoId: string;
+  planId: string;
+  contentId: string;
+  version: number;
+  durationSec: number;
+  resolution: string;
+  fps: number;
+  aspectRatio: string;
+  subtitleFile: string;
+  scenes: FinalVideoScene[];
+  layers: {
+    visual: string[];
+    voice: string[];
+    clips: string[];
+    subtitles: string;
+    music: string;
+    sfx: string;
+  };
+  exportSettings: { codec: string; bitrate: string; audio: string; notes: string };
+  reproducibilityNotes: string;
+  poster: string;
+  model: string;
+  provider: string;
+  costEur: number;
+}
+
 export interface Content {
   id: string;
   title: string | null;
@@ -39,6 +78,7 @@ export interface Content {
   revisable?: boolean;
   assetScenes?: { sceneId: string; file: string }[];
   audioScenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[];
+  assemblyManifest?: AssemblyManifest | null;
 }
 
 export interface Approval {

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import {
   api,
   type Agent,
   type AgentMode,
   type Approval,
+  type AssemblyManifest,
   type Content,
   type Dashboard,
   type Pipeline,
@@ -91,7 +92,7 @@ export function App() {
   );
 
   const revisePlan = useCallback(
-    (contentId: string) => wrap(api.revisePlan(contentId), 'Revision started — new plan queued'),
+    (contentId: string) => wrap(api.revisePlan(contentId), 'Revision started â€” new plan queued'),
     [wrap],
   );
 
@@ -188,7 +189,7 @@ function Header({
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="glow flex h-9 w-9 items-center justify-center rounded-lg bg-accent-500/10 text-accent-400">
-            <span className="text-lg font-black">◉</span>
+            <span className="text-lg font-black">â—‰</span>
           </div>
           <div>
             <div className="text-base font-semibold text-slate-100">AI Content Factory</div>
@@ -206,10 +207,10 @@ function Header({
                 apiOk === false ? 'bg-red-500' : apiOk ? 'bg-emerald-500' : 'bg-slate-500'
               }`}
             />
-            {apiOk === false ? 'API offline' : apiOk ? 'API online' : 'connecting…'}
+            {apiOk === false ? 'API offline' : apiOk ? 'API online' : 'connectingâ€¦'}
           </span>
           <Btn onClick={onRefresh} disabled={busy}>
-            ⟳ Refresh
+            âŸ³ Refresh
           </Btn>
         </div>
       </div>
@@ -289,7 +290,7 @@ function DashboardView({
                       disabled={busy}
                       className="rounded-md border border-ink-700 px-2 py-0.5 text-[11px] font-medium text-slate-300 transition hover:bg-ink-700 disabled:opacity-40"
                     >
-                      ▶ Run
+                      â–¶ Run
                     </button>
                   )}
                 </span>
@@ -303,7 +304,7 @@ function DashboardView({
 }
 
 function PipelineFlow({ pendingApprovals }: { pendingApprovals: number }) {
-  const steps = ['Research', 'Script', 'Director', 'QA'];
+  const steps = ['Research', 'Script', 'Director', 'Visual', 'Voice', 'Assembly', 'QA'];
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {steps.map((s, i) => (
@@ -311,11 +312,11 @@ function PipelineFlow({ pendingApprovals }: { pendingApprovals: number }) {
           <div className="rounded-lg border border-ink-700 bg-ink-850 px-3 py-1.5 text-sm text-slate-200">
             {s}
           </div>
-          {i < steps.length - 1 && <span className="text-slate-600">→</span>}
+          {i < steps.length - 1 && <span className="text-slate-600">â†’</span>}
         </div>
       ))}
       <span className="ml-3 text-xs text-slate-500">
-        {pendingApprovals > 0 ? '⏸ waiting for human approval' : '· QA auto-runs · publish disabled (MVP)'}
+        {pendingApprovals > 0 ? 'â¸ waiting for human approval' : 'Â· QA auto-runs Â· publish disabled (MVP)'}
       </span>
     </div>
   );
@@ -332,14 +333,14 @@ function AgentsView({ agents }: { agents: Agent[] }) {
               <div>
                 <div className="font-semibold text-slate-100">{a.name}</div>
                 <div className="text-[11px] uppercase tracking-widest text-slate-500">
-                  mode · {a.mode}
+                  mode Â· {a.mode}
                 </div>
               </div>
               <Badge tone={toneForStatus(a.status)}>{a.status}</Badge>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <div className="text-slate-500">
-                Cost <span className="text-slate-200">€{a.totalCost.toFixed(4)}</span>
+                Cost <span className="text-slate-200">â‚¬{a.totalCost.toFixed(4)}</span>
               </div>
               <div className="text-slate-500">
                 Tokens <span className="text-slate-200">{a.totalTokens.toLocaleString()}</span>
@@ -348,7 +349,7 @@ function AgentsView({ agents }: { agents: Agent[] }) {
             {a.lastJob && (
               <div className="mt-2 border-t border-ink-700/50 pt-2 text-xs text-slate-500">
                 last job: <span className="font-mono text-slate-400">{a.lastJob.id.slice(0, 10)}</span>{' '}
-                · {a.lastJob.status}
+                Â· {a.lastJob.status}
               </div>
             )}
           </Card>
@@ -373,7 +374,7 @@ function PipelineView({
   return (
     <div className="space-y-4">
       <div>
-        <SectionTitle>Pipeline — {pipeline.name}</SectionTitle>
+        <SectionTitle>Pipeline â€” {pipeline.name}</SectionTitle>
         <p className="mt-1 text-xs text-slate-500">
           Per-step execution mode (AUTO / SEMI / MANUAL) and approval gates. Changes persist and
           apply to the next started pipeline.
@@ -404,7 +405,7 @@ function StepCard({
         <div>
           <div className="font-semibold capitalize text-slate-100">{step.agent}</div>
           <div className="text-[11px] uppercase tracking-widest text-slate-500">
-            gate · {step.approvalKind ?? '—'}
+            gate Â· {step.approvalKind ?? 'â€”'}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -481,19 +482,20 @@ function ContentCard({
   busy: boolean;
 }) {
   const qa = c.latestQa;
+  const video = c.assemblyManifest ?? null;
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="font-semibold text-slate-100">{c.title ?? '(untitled idea)'}</div>
           <div className="font-mono text-[11px] text-slate-500">
-            {c.id} · {c.format ?? '—'} · {c.targetAge ?? '—'}
-            {c.planVersion ? ` · plan v${c.planVersion}` : ''}
+            {c.id} Â· {c.format ?? 'â€”'} Â· {c.targetAge ?? 'â€”'}
+            {c.planVersion ? ` Â· plan v${c.planVersion}` : ''}
           </div>
           {qa && (
             <div className="mt-2 max-w-xl space-y-1">
               <span className={`text-[11px] font-semibold uppercase tracking-widest ${qa.status === 'rejected' ? 'text-red-400' : 'text-emerald-400'}`}>
-                QA {qa.status} · score {qa.score.toFixed(1)}
+                QA {qa.status} Â· score {qa.score.toFixed(1)}
               </span>
               {qa.status === 'rejected' &&
                 qa.issues.slice(0, 3).map((i, n) => (
@@ -523,7 +525,7 @@ function ContentCard({
                 <div key={s.sceneId} className="flex items-center gap-2">
                   <span className="w-24 shrink-0 truncate font-mono text-[11px] text-slate-500">
                     {s.sceneId}
-                    {s.durationSeconds ? ` · ${s.durationSeconds}s` : ''}
+                    {s.durationSeconds ? ` Â· ${s.durationSeconds}s` : ''}
                   </span>
                   <audio
                     controls
@@ -537,12 +539,13 @@ function ContentCard({
               ))}
             </div>
           )}
+          {video && <FinalVideoPreview content={c} video={video} />}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone={toneForStatus(c.status)}>{c.status}</Badge>
           {c.revisable && (
             <Btn kind="danger" onClick={() => onRevisePlan(c.id)} disabled={busy} title="Re-run Director to revise the plan after QA rejection">
-              ↻ Revise plan
+              â†» Revise plan
             </Btn>
           )}
           <Btn kind="primary" onClick={() => onStartPipeline(c.id)} disabled={busy}>
@@ -551,6 +554,120 @@ function ContentCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+function FinalVideoPreview({ content, video }: { content: Content; video: AssemblyManifest }) {
+  const [idx, setIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const scenes = video.scenes;
+  const current = scenes[idx];
+
+  useEffect(() => {
+    if (!playing || scenes.length === 0) return;
+    const sceneDur = Math.max(1, (current?.endSec ?? 1) - (current?.startSec ?? 0));
+    const t = setTimeout(() => {
+      if (idx + 1 >= scenes.length) {
+        setIdx(0);
+      } else {
+        setIdx(idx + 1);
+      }
+    }, sceneDur * 1000);
+    return () => clearTimeout(t);
+  }, [playing, idx, scenes, current]);
+
+  if (!current) return null;
+  const clipUrl = `/api/assets/${content.id}/assembly/${current.clipFile}`;
+  const voiceUrl = `/api/assets/${content.id}/audio/${current.voiceFile}`;
+  const subtitleUrl = `/api/assets/${content.id}/assembly/${video.subtitleFile}`;
+  const isAnimated = current.clipMime === 'image/gif';
+  const isVideo = current.clipMime.startsWith('video/');
+
+  return (
+    <div className="mt-3 w-full max-w-md rounded-xl border border-ink-700/60 bg-ink-850 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-accent-400">
+          Final video Â· {video.videoId}
+        </span>
+        <div className="flex gap-2 text-[11px] text-slate-500">
+          <a className="underline hover:text-slate-300" href={subtitleUrl} target="_blank" rel="noreferrer">
+            subtitles.vtt
+          </a>
+          <a
+            className="underline hover:text-slate-300"
+            href={`/api/assets/${content.id}/${video.poster}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            poster
+          </a>
+        </div>
+      </div>
+
+      <div className="mx-auto w-fit">
+        <div className="relative h-64 w-36 overflow-hidden rounded-lg border border-slate-700 bg-black">
+          {isAnimated && <img src={clipUrl} alt={current.sceneId} className="h-full w-full object-cover" />}
+          {isVideo && (
+            <video key={current.sceneId} src={clipUrl} className="h-full w-full object-cover" muted loop autoPlay={playing} />
+          )}
+          {!isAnimated && !isVideo && (
+            <img src={`/api/assets/${content.id}/${current.visualFile}`} alt={current.sceneId} className="h-full w-full object-cover" />
+          )}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1 pt-6 text-[11px] text-slate-200">
+            {current.sceneId} Â· {current.startSec.toFixed(1)}sâ€“{current.endSec.toFixed(1)}s
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 min-h-8 text-center text-xs text-slate-300">
+        {current.narration}
+      </div>
+
+      {isVideo && (
+        <audio key={current.sceneId} controls autoPlay={playing} className="mt-1 h-8 w-full" src={voiceUrl} />
+      )}
+      {isAnimated && (
+        <div className="mt-1 h-8" title="Voice plays while the animated clip paces the scene" />
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1">
+          {scenes.map((s, i) => (
+            <button
+              key={s.sceneId}
+              onClick={() => {
+                setIdx(i);
+                setPlaying(false);
+              }}
+              title={s.sceneId}
+              className={`h-2 w-2 rounded-full transition ${i === idx ? 'bg-accent-400' : 'bg-slate-600 hover:bg-slate-400'}`}
+            />
+          ))}
+        </div>
+        <div className="flex gap-1.5">
+          <Btn onClick={() => { setPlaying(false); setIdx(Math.max(0, idx - 1)); }}>
+            â€¹ Prev
+          </Btn>
+          <Btn kind={playing ? 'default' : 'primary'} onClick={() => setPlaying(!playing)}>
+            {playing ? 'âšâš Pause' : 'â–¶ Play'}
+          </Btn>
+          <Btn onClick={() => { setPlaying(false); setIdx(Math.min(scenes.length - 1, idx + 1)); }}>
+            Next â€º
+          </Btn>
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-ink-700/50 pt-2 text-[11px] text-slate-500">
+        <span>
+          {video.resolution} Â· {video.aspectRatio} Â· {video.fps}fps
+        </span>
+        <span>
+          {video.durationSec}s Â· {video.scenes.length} scenes
+        </span>
+        <span className="capitalize">model: {video.model.replace(/^stub-/, 'stub Â· ')}</span>
+        <span>provider: {video.provider}</span>
+      </div>
+    </div>
   );
 }
 
@@ -596,15 +713,15 @@ function ApprovalCard({
             <Badge tone="WAITING_APPROVAL">AWAITING REVIEW</Badge>
           </div>
           <div className="font-mono text-[11px] text-slate-500">
-            {a.id} · content {a.contentId}
+            {a.id} Â· content {a.contentId}
           </div>
         </div>
         <div className="flex gap-2">
           <Btn kind="success" onClick={() => onDecide(a.id, 'APPROVED', 'approved in control center')} disabled={busy}>
-            ✓ Approve
+            âœ“ Approve
           </Btn>
           <Btn kind="danger" onClick={() => onDecide(a.id, 'REJECTED')} disabled={busy}>
-            ✗ Reject
+            âœ— Reject
           </Btn>
         </div>
       </div>

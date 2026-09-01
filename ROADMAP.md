@@ -79,9 +79,33 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
   so pipeline wiring is proven; **live neural TTS stays UNPROVEN** until the NIM
   is available.
 
-## Phase 7 — Assembly
-- Video Assembly Agent: compose scenes/images/clips/voice/music/subtitles/
-  effects -> final video. Reproducible.
+## Phase 7 — Assembly (DONE, `AICF-008`; live veo/seedance clips UNPROVEN)
+- Video Assembly Agent (`assembly` step after Voice, before QA): consumes the
+  ProductionPlan + `assets` + `voice` manifests and produces a **reproducible
+  final video as composition data** — a `FinalVideoManifest` (exact scene
+  timeline normalized to the plan total, per-scene clip/visual/voice layer
+  references, resolution 768x1344 9:16) persisted as the `video` artifact,
+  plus `subtitles.vtt` captions, a poster, and per-scene clips under
+  `backend/assets/{contentId}/assembly/`.
+- New gateway channel `POST /v1/videos/generations`
+  (`gateway/video.ts`, model `veo-free/veo`). **Honest stub default** (D-15):
+  `OMNIROUTE_VIDEO_STUB=1` generates a Deterministic animated GIF (pure-Node
+  GIF89a + non-compressing LZW,
+  scene-seeded motion band) so the whole pipeline/file-write/serve/UI path stays
+  E2E-verifiable; real veo/seedance is gated behind `OMNIROUTE_VIDEO_STUB=0` and
+  is **UNPROVEN** — probes of `veo-free/veo`(240s) and the other three live
+  video models(150s each) all timed out; the live path now fails cleanly after
+  a 120s timeout instead of hanging a job.
+- Control Center: Final Video preview player on each content card (per-scene
+  animated clip / image / video, caption marquee, scene dots, Play/Pause/Prev/
+  Next, voice audio per scene, links to `subtitles.vtt` + poster); pipeline flow
+  now shows Research → Script → Director → Visual → Voice → Assembly → QA.
+- Pipeline store reconciliation: stored definitions are merged against the
+  canonical DEFAULT_PIPELINE on load (missing steps injected, operator overrides
+  preserved) — fixes dev DBs seeded before a step existed.
+- E2E proven (fresh DB, stub channels): full brain-first pipeline → Assembly →
+  QA; content `ASSEMBLED`; 4 scenes, 30s normalized timeline, 4 GIF clips
+  (GIF89a, ~216KB) + `subtitles.vtt` + poster served with correct MIME.
 
 ## Phase 8 — QA
 - QA Agent: automated review (duration, resolution, vertical, audio, subtitles,

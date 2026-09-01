@@ -61,6 +61,35 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
       if (!planArt) throw new Error('No production plan for voice');
       return { plan: safeJson(planArt.payload), contentId: content.id };
     }
+    case 'assembly': {
+      const planArt = latestArtefact(content.id, 'production_plan');
+      if (!planArt) throw new Error('No production plan for assembly');
+      const assetsArt = latestArtefact(content.id, 'assets');
+      if (!assetsArt) throw new Error('No visual assets for assembly — run Visual first');
+      const voiceArt = latestArtefact(content.id, 'voice');
+      if (!voiceArt) throw new Error('No voice assets for assembly — run Voice first');
+      const assets = safeJson(assetsArt.payload) as {
+        scenes?: { sceneId: string; file: string; mime?: string }[];
+      };
+      const voice = safeJson(voiceArt.payload) as {
+        scenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[];
+      };
+      return {
+        plan: safeJson(planArt.payload),
+        contentId: content.id,
+        sceneImages: (assets.scenes ?? []).map((s) => ({
+          sceneId: s.sceneId,
+          file: s.file,
+          mime: s.mime ?? 'image/png',
+        })),
+        sceneVoice: (voice.scenes ?? []).map((s) => ({
+          sceneId: s.sceneId,
+          file: s.file,
+          mime: s.mime ?? 'audio/wav',
+          durationSeconds: s.durationSeconds ?? 0,
+        })),
+      };
+    }
   }
 }
 
@@ -359,6 +388,8 @@ export class Orchestrator {
         return 'director';
       case 'asset':
         return 'visual';
+      case 'video':
+        return 'assembly';
       default:
         return 'qa';
     }
@@ -550,6 +581,8 @@ function stageFor(agent: AgentType): import('../domain/types.js').ContentStatus 
       return 'PRODUCING';
     case 'voice':
       return 'PRODUCING';
+    case 'assembly':
+      return 'ASSEMBLED';
     case 'qa':
       return 'QA';
   }
@@ -568,6 +601,8 @@ function defaultArtifactKind(agent: AgentType): string | undefined {
       return 'assets';
     case 'voice':
       return 'voice';
+    case 'assembly':
+      return 'video';
     case 'qa':
       return 'qa';
   }
@@ -586,6 +621,8 @@ function defaultApprovalKind(agent: AgentType): string {
       return 'asset';
     case 'voice':
       return 'audio';
+    case 'assembly':
+      return 'video';
     case 'qa':
       return 'video';
   }
