@@ -11,7 +11,7 @@ video rendering.
 | `ARCHITECTURE.md` | Components, layers, data flow, model gateway, orchestration |
 | `PRODUCT.md` | Vision, users, agents, pipelines, HITL, lifecycle |
 | `DECISIONS.md` | Technical decisions + trade-offs; what we deliberately do NOT need |
-| `ROADMAP.md` | Phase 0..11 plan (Phases 1-3 done: Foundation, Control Center, Configurable modes; Phase 4: Director revision loop) |
+| `ROADMAP.md` | Phase 0..11 plan (Phases 1-3 done; Phase 4: Director revision loop; Phase 5: Visual Agent) |
 
 ## Stack (MVP)
 
@@ -42,11 +42,20 @@ OmniRoute must be reachable. Default tasks route to `auto/*` combos.
 ## Brain-first pipeline
 
 ```
-Research -> [APPROVE ideas] -> Script -> [APPROVE] -> Director -> [APPROVE] -> QA
+Research -> [APPROVE ideas] -> Script -> [APPROVE] -> Director -> [APPROVE] -> Visual -> QA
 ```
 
-Each creative step halts for human approval (SEMI-AUTOMATIC); QA runs
+Each creative step halts for human approval (SEMI-AUTOMATIC); Visual and QA run
 AUTOMATIC. Jobs, approvals, artifacts and cost are persisted and recoverable.
+
+## Visual Agent (Phase 5)
+
+After the plan is approved, the **Visual Agent** generates one vertical
+(`768x1344`) still per scene using FLUX (`flux.2-klein-4b`) through OmniRoute's
+OpenAI-compatible Images API. Images are saved to `backend/assets/{contentId}/`
+(gitignored), a JSON `assets` manifest is persisted as an artifact, and files are
+served at `GET /api/assets/{contentId}/{file}`. The Content tab renders scene
+thumbnails.
 
 ## Execution modes (per step)
 

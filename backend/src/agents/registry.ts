@@ -3,9 +3,11 @@ import { researchAgent } from './research.js';
 import { scriptAgent } from './script.js';
 import { directorAgent } from './director.js';
 import { qaAgent } from './qa.js';
+import { visualAgent } from './visual.js';
 import type { Idea, ProductionPlan, Script } from './contracts.js';
+import type { AssetsManifest } from './visual.js';
 
-export type AgentType = 'research' | 'script' | 'director' | 'qa';
+export type AgentType = 'research' | 'script' | 'director' | 'visual' | 'qa';
 
 /** Normalized result every agent returns for a Job. */
 export interface AgentRunResult {
@@ -51,6 +53,20 @@ const runners: Record<AgentType, AgentRunner> = {
       return { data: out.plan, usage: out.usage, model: out.model, provider: out.provider, artifactKind: 'production_plan' };
     },
   },
+  visual: {
+    type: 'visual',
+    name: 'Visual / Image Agent',
+    async run(input) {
+      const out = await visualAgent(input as VisualInput);
+      return {
+        data: out.assets,
+        usage: { tokensIn: 0, tokensOut: 0, requests: out.count, costEur: out.costEur },
+        artifactKind: 'assets',
+        model: out.model,
+        provider: out.provider,
+      };
+    },
+  },
   qa: {
     type: 'qa',
     name: 'QA Agent',
@@ -63,6 +79,7 @@ const runners: Record<AgentType, AgentRunner> = {
 
 export type ScriptInput = Parameters<typeof scriptAgent>[0];
 export type PlanInput = Parameters<typeof directorAgent>[0];
+export type VisualInput = Parameters<typeof visualAgent>[0];
 export type QaInput = Parameters<typeof qaAgent>[0];
 
 export function getRunner(type: AgentType): AgentRunner {
@@ -76,4 +93,4 @@ export function allRunners(): AgentRunner[] {
 }
 
 // Re-export contract types for convenience.
-export type { Idea, Script, ProductionPlan };
+export type { Idea, Script, ProductionPlan, AssetsManifest };

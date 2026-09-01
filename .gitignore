@@ -21,7 +21,8 @@ build/
 *.db-wal
 *.db-shm
 
-# Assets / generated media
+# Assets / generated media (binary outputs, never committed)
+backend/assets/
 /factory/backend/assets/
 
 # OS

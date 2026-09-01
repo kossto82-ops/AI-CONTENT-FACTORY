@@ -1,4 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { getDB } from './db/database.js';
 import { contentRepo, jobRepo, approvalRepo, artifactRepo } from './db/repository.js';
@@ -13,6 +16,8 @@ import {
 } from './pipelineStore.js';
 
 const orchestrator = new Orchestrator();
+
+const ASSETS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'assets');
 
 // ---- helpers ----
 
@@ -153,11 +158,16 @@ const routes: Route[] = [
         const base = contentToApi(c);
         const qa = latestQaSummary(c.id);
         const planArt = artifactRepo.latest(c.id, 'production_plan');
+        const assetsArt = artifactRepo.latest(c.id, 'assets');
+        const assetManifest = assetsArt
+          ? (safeParse(assetsArt.payload) as { scenes?: { sceneId: string; file: string }[] } | null)
+          : null;
         return {
           ...base,
           planVersion: planArt?.version ?? 0,
           latestQa: qa ? { status: qa.status, score: qa.score, issues: qa.issues } : null,
           revisable: qa?.status === 'rejected' && !!planArt,
+          assetScenes: assetManifest?.scenes ?? [],
         };
       });
       sendJson(res, 200, { content });
@@ -200,6 +210,29 @@ const routes: Route[] = [
           createdAt: a.created_at,
         })),
       });
+    },
+  },
+  {
+    method: 'GET',
+    match: /^\/api\/assets\/([^/]+)\/(.+)$/,
+    async handler(m, _req, res) {
+      const contentId = decodeURIComponent(m[1]!);
+      const file = decodeURIComponent(m[2]!);
+      // Prevent path traversal outside the content's asset dir.
+      if (/\.\./.test(file) || !/^[\w.\- ]+$/.test(file)) {
+        return sendJson(res, 400, { error: 'invalid asset path' });
+      }
+      const abs = join(ASSETS_ROOT, contentId, file);
+      try {
+        const data = await readFile(abs);
+        const ext = file.split('.').pop()?.toLowerCase();
+        const mime =
+          ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+        res.writeHead(200, { 'content-type': mime, 'cache-control': 'public, max-age=3600' });
+        res.end(data);
+      } catch {
+        sendJson(res, 404, { error: 'asset not found' });
+      }
     },
   },
   {

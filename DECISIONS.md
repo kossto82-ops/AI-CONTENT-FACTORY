@@ -151,6 +151,28 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
   returns 400 when the latest QA is approved).
 - **Reversibility**: high (a revision just adds another job/artifact version).
 
+## D-12 — Images are a separate gateway channel; binaries live on disk
+
+- **Decision**: Image generation uses a dedicated OmniRoute channel
+  (`POST /v1/images/generations`, OpenAI Images shape, inline `b64_json`) rather
+  than the text channel. Generated binaries are written to
+  `backend/assets/{contentId}/` (gitignored); only a JSON `assets` manifest
+  (scene -> file/mime/bytes) is persisted as the artifact and served via a
+  path-guarded static route.
+- **Alternatives**: forcing images through the text gateway (impossible — different
+  response shape), or storing base64 in the artifact payload (bloats the DB, not
+  JSON-servable).
+- **Reason**: the DB stays JSON-only and diffable; binaries are cheap on disk and
+  replaceable; the manifest keeps the scene->file index queryable. Cost is
+  per-image (flat ≈€0.002), tracked on the visual job.
+- **Trade-offs**: an extra channel/decoder + disk storage + a static route; files
+  are machine-local (fine for MVP, packaging/deploy concern later).
+- **Status**: IMPLEMENTED (Phase 5, `AICF-006`) — `gateway/image.ts`, `visual`
+  agent, `assets` artifact, `GET /api/assets/{contentId}/{file}`. E2E-verified: a
+  full pipeline produced 4 real JPEGs (FF D8 FF magic, 194-230KB), served over the
+  UI proxy; traversal blocked.
+- **Reversibility**: high.
+
 ---
 
 ## Environment findings feeding decisions

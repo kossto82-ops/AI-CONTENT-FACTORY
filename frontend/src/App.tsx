@@ -503,6 +503,20 @@ function ContentCard({
                 ))}
             </div>
           )}
+          {c.assetScenes && c.assetScenes.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {c.assetScenes.map((s) => (
+                <img
+                  key={s.sceneId}
+                  src={`/api/assets/${c.id}/${s.file}`}
+                  alt={s.sceneId}
+                  title={s.sceneId}
+                  className="h-20 w-12 rounded border border-slate-700 object-cover"
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone={toneForStatus(c.status)}>{c.status}</Badge>

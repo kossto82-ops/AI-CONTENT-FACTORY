@@ -51,6 +51,11 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
       const c = content;
       return { plan: safeJson(planArt.payload), scriptTitle: c.title };
     }
+    case 'visual': {
+      const planArt = latestArtefact(content.id, 'production_plan');
+      if (!planArt) throw new Error('No production plan for visual');
+      return { plan: safeJson(planArt.payload), contentId: content.id };
+    }
   }
 }
 
@@ -347,6 +352,8 @@ export class Orchestrator {
         return 'script';
       case 'plan':
         return 'director';
+      case 'asset':
+        return 'visual';
       default:
         return 'qa';
     }
@@ -534,6 +541,8 @@ function stageFor(agent: AgentType): import('../domain/types.js').ContentStatus 
       return 'SCRIPTED';
     case 'director':
       return 'DIRECTED';
+    case 'visual':
+      return 'PRODUCING';
     case 'qa':
       return 'QA';
   }
@@ -548,6 +557,8 @@ function defaultArtifactKind(agent: AgentType): string | undefined {
       return 'script';
     case 'director':
       return 'production_plan';
+    case 'visual':
+      return 'assets';
     case 'qa':
       return 'qa';
   }
@@ -562,6 +573,8 @@ function defaultApprovalKind(agent: AgentType): string {
       return 'script';
     case 'director':
       return 'plan';
+    case 'visual':
+      return 'asset';
     case 'qa':
       return 'video';
   }

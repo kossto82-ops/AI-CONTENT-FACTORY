@@ -1,7 +1,8 @@
 # AI Content Factory — Architecture
 
-Status: PROPOSED (Phase 4). Control Center + configurable pipeline modes +
-Director revision loop (rollback on QA rejection). E2E-verified against live gateway.
+Status: PROPOSED (Phase 5). Control Center + configurable pipeline modes +
+Director revision loop + Visual Agent (FLUX image generation, asset store).
+E2E-verified against live gateway.
 
 ## 1. Purpose
 
@@ -145,6 +146,21 @@ step is persisted and versioned before the next step reads it.
 - Provider resolution: OmniRoute (default) or FreeLLM (alias / failover).
 - Normalization: all providers return the same output shape.
 - Usage + cost accounting happens here (single choke point).
+
+### 8.1 Image channel (Visual Agent)
+
+- Image generation is a SEPARATE gateway channel from text: OmniRoute exposes an
+  OpenAI-compatible Images API (`POST /v1/images/generations`) returning inline
+  base64 (`data[0].b64_json`), not `content[].text`. Implemented as
+  `gateway/image.ts` (`callOmniRouteImage`).
+- Default model `nvidia/black-forest-labs/flux.2-klein-4b` (~2s/image, reliable on
+  the test rig; `flux.1-schnell`/`dev` can stall). Vertical `768x1344` for Shorts.
+- The Visual Agent builds one character/style-consistent prompt per scene from the
+  ProductionPlan, calls the image channel, and writes the binary to
+  `backend/assets/{contentId}/`. Only the JSON `assets` manifest (scene -> file,
+  mime, bytes) is persisted as the artifact — the DB stays JSON-only; binaries live
+  on disk (gitignored) and are served at `GET /api/assets/{contentId}/{file}`
+  (path-traversal guarded).
 
 ## 9. Orchestration
 

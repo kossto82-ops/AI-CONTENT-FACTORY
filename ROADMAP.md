@@ -55,10 +55,14 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
   re-runs the Director with the latest QA issues -> `production_plan` v2+ -> plan gate -> QA v2.
   UI surfaces the latest QA verdict + a "Revise plan" action when rejected.
 
-## Phase 5 — Visual
-- Visual Agent: image generation (FLUX via OmniRoute), asset selection,
-  character/scene consistency, versioned assets. Video-gen ready (veo/seedance).
-- Requires ffmpeg or image/gen tooling decision at this point.
+## Phase 5 — Visual (DONE, `AICF-006`)
+- Visual Agent: **image generation (FLUX via OmniRoute)** — a new image-only gateway
+  channel (`POST /v1/images/generations`) returns inline base64 JPEGs.
+- Consumes `production_plan`; generates **one vertical (768x1344) image per scene** with
+  character/style-consistent prompts (`flux.2-klein-4b`, ~2s/image).
+- Saves PNG/JPEG to `backend/assets/{contentId}/`, persists an `assets` JSON manifest
+  (scene -> file), served at `GET /api/assets/{contentId}/{file}`; UI shows thumbnails.
+- Video-gen ready (veo/seedance) for Phase 7. No vision QA here (deferred to Phase 8).
 
 ## Phase 6 — Voice
 - Voice Agent: narration + character voices (TTS via OmniRoute), audio,

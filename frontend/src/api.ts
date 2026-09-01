@@ -37,6 +37,7 @@ export interface Content {
   planVersion?: number;
   latestQa?: { status: string; score: number; issues: QaIssue[] } | null;
   revisable?: boolean;
+  assetScenes?: { sceneId: string; file: string }[];
 }
 
 export interface Approval {
