@@ -49,9 +49,11 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
   Run executed it explicitly -> `script v1` COMPLETED, pipeline halted (no
   director materialized). Cost ~€0.0016 for the manual script run.
 
-## Phase 4 — Director
+## Phase 4 — Director (DONE, `AICF-004`)
 - Director Agent: script -> ProductionPlan (Scene[] contract).
-- Versioned plans; rollback path on QA rejection.
+- Versioned plans; **rollback path on QA rejection**: `POST /api/content/:id/revise/director`
+  re-runs the Director with the latest QA issues -> `production_plan` v2+ -> plan gate -> QA v2.
+  UI surfaces the latest QA verdict + a "Revise plan" action when rejected.
 
 ## Phase 5 — Visual
 - Visual Agent: image generation (FLUX via OmniRoute), asset selection,

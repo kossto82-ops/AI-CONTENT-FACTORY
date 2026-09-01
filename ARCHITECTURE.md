@@ -1,7 +1,7 @@
 # AI Content Factory — Architecture
 
-Status: PROPOSED (Phase 3). Control Center + configurable pipeline modes
-E2E-verified against live gateway.
+Status: PROPOSED (Phase 4). Control Center + configurable pipeline modes +
+Director revision loop (rollback on QA rejection). E2E-verified against live gateway.
 
 ## 1. Purpose
 
@@ -179,3 +179,16 @@ step is persisted and versioned before the next step reads it.
   `(content_id, version)` unique; never deleted.
 - Re-run of an agent creates a NEW version; the old one is retained and
   referenced, enabling rollback after QA failure (Director revises -> v2).
+
+### 12.1 Director revision loop (rollback path)
+
+- When the latest QA verdict is `rejected`, the content becomes `revisable`
+  (only if a `production_plan` exists).
+- `POST /api/content/:id/revise/director` re-runs the Director step with an
+  input override: `{ script, revision: { issues, previousPlan } }` — the QA
+  issues are injected into the Director prompt so the revised plan addresses
+  them. The guard rejects the call if the latest QA is not `rejected`.
+- The revision is drained as a normal pipeline job: Director -> plan gate ->
+  QA v2. QA runs against the new plan version, so the loop can iterate (v2,
+  v3, ...) until QA approves. The UI surfaces the latest verdict + a
+  "Revise plan" action when `revisable`.

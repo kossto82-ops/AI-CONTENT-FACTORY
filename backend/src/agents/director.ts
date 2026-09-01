@@ -5,10 +5,17 @@ import { productionPlanSchema, type ProductionPlan, type Script } from './contra
 /**
  * Director Agent — does NOT produce video. Converts a script into a
  * ProductionPlan (the contract between creative content and production
- * systems). Scene-by-scene directives.
+ * systems). Scene-by-scene directives. Supports revision: when QA rejects a
+ * plan, the next run receives the prior QA issues to fix (produces plan v2+).
  */
+export interface RevisionContext {
+  issues: { severity: string; category: string; message: string }[];
+  previousPlan?: ProductionPlan;
+}
+
 export interface PlanInput {
   script: Script;
+  revision?: RevisionContext;
 }
 
 export interface PlanOutput {
@@ -20,24 +27,42 @@ export interface PlanOutput {
 
 export async function directorAgent(input: PlanInput): Promise<PlanOutput> {
   const script = input.script;
+  const revision = input.revision;
 
   const schemaHint =
     '{"title":"string","targetAge":"string","totalDurationSeconds":number,"visualStyle":"string",' +
     '"scenes":[{"id":"string","durationSeconds":number,"characters":["string"],"location":"string",' +
     '"action":"string","camera":"string","emotion":"string","narration":"string"}]}';
 
+  const system =
+    'You are a video director for children\'s shorts. Convert the script into a precise ProductionPlan: a ' +
+    'shot-by-shot technical contract. Specify visual style and a camera framing for each scene. This plan will ' +
+    'feed asset generation, voice, and assembly. Be unambiguous and reproducible.';
+
+  const revisionBlock = revision
+    ? [
+        '\nThe PREVIOUS version of this plan was REJECTED by the QA reviewer.',
+        `QA issues to fix (${revision.issues.length}):`,
+        ...revision.issues.map((i, n) => `${n + 1}. [${i.severity}] ${i.category}: ${i.message}`),
+        revision.previousPlan
+          ? `Here is the REJECTED previous plan for reference (do not copy its flaws):\n${JSON.stringify(revision.previousPlan, null, 2)}`
+          : '',
+        'Produce a REVISED plan (same title/scenes as the script) that resolves every listed issue. ' +
+          'Ensure totalDurationSeconds matches the sum of scene durations exactly, scenes flow in spatial/sequencing ' +
+          'order, every scene keeps its narration, and pacing fits the target age.',
+      ].join('\n')
+    : '';
+
   const r = await gatewayExecute<ProductionPlan>({
     task: 'direction.planning',
-    system:
-      'You are a video director for children\'s shorts. Convert the script into a precise ProductionPlan: a ' +
-      'shot-by-shot technical contract. Specify visual style and a camera framing for each scene. This plan will ' +
-      'feed asset generation, voice, and assembly. Be unambiguous and reproducible.',
+    system,
     messages: [
       {
         role: 'user',
         content:
           'Convert this script into a ProductionPlan (keep the same scenes and narration):\n' +
-          JSON.stringify(script, null, 2),
+          JSON.stringify(script, null, 2) +
+          revisionBlock,
       },
     ],
     json: true,

@@ -19,6 +19,12 @@ export interface Job {
   trace: unknown[];
 }
 
+export interface QaIssue {
+  severity: string;
+  category: string;
+  message: string;
+}
+
 export interface Content {
   id: string;
   title: string | null;
@@ -28,6 +34,9 @@ export interface Content {
   status: string;
   currentVersion: number;
   createdAt: string;
+  planVersion?: number;
+  latestQa?: { status: string; score: number; issues: QaIssue[] } | null;
+  revisable?: boolean;
 }
 
 export interface Approval {
@@ -116,6 +125,11 @@ export const api = {
     }),
   runJob: (jobId: string) =>
     req<{ ran: boolean; progressed: boolean; jobId: string }>(`/api/jobs/${jobId}/run`, { method: 'POST' }),
+  revisePlan: (contentId: string) =>
+    req<{ started: boolean; jobId: string; contentId: string }>(
+      `/api/content/${contentId}/revise/director`,
+      { method: 'POST' },
+    ),
   createContent: (topic?: string, targetAge?: string) =>
     req<{ id: string }>('/api/content', {
       method: 'POST',

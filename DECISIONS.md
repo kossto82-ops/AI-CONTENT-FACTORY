@@ -130,6 +130,27 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
   explicit run completed it).
 - **Reversibility**: medium.
 
+## D-11 — QA rejection rolls the Director back (revise loop)
+
+- **Decision**: On a `rejected` QA verdict, the content stays revisable and the
+  operator can re-run the Director with the QA issues as context, producing a
+  new plan version that QA re-evaluates. Revising is an explicit, gated action,
+  never an automatic redo.
+- **Alternatives**: auto-retry the plan without a human gate (undisciplined,
+  cost-drift) vs. dead-ending on rejection (no rollback path).
+- **Reason**: closes the Phase 4 gap — a rejected plan previously stranded the
+  content in `QA` status with no way forward. Reusing the normal job drain keeps
+  the director -> plan gate -> QA v2 chain and per-version retention.
+- **Trade-offs**: an extra endpoint + input override in `touchStep`; QA may
+  reject repeatedly (real model variability), so iteration cost is visible.
+- **Status**: IMPLEMENTED (Phase 4, `AICF-004`) — `POST
+  /api/content/:id/revise/director` re-runs the Director with
+  `{ script, revision: { issues, previousPlan } }`; content list exposes
+  `latestQa` + `revisable`; the UI shows the verdict banner + "Revise plan".
+  E2E-verified (rejected plan -> revision -> production_plan v2 -> QA v2; guard
+  returns 400 when the latest QA is approved).
+- **Reversibility**: high (a revision just adds another job/artifact version).
+
 ---
 
 ## Environment findings feeding decisions

@@ -11,7 +11,7 @@ video rendering.
 | `ARCHITECTURE.md` | Components, layers, data flow, model gateway, orchestration |
 | `PRODUCT.md` | Vision, users, agents, pipelines, HITL, lifecycle |
 | `DECISIONS.md` | Technical decisions + trade-offs; what we deliberately do NOT need |
-| `ROADMAP.md` | Phase 0..11 plan (Phases 1-3 done: Foundation, Control Center, Configurable modes) |
+| `ROADMAP.md` | Phase 0..11 plan (Phases 1-3 done: Foundation, Control Center, Configurable modes; Phase 4: Director revision loop) |
 
 ## Stack (MVP)
 
@@ -55,6 +55,14 @@ plus an approval-gate toggle from the **Pipeline** tab. Config persists in the
 `pipeline` table; MANUAL steps stay `READY` until you run them explicitly (▶ Run
 button on the Dashboard). `PUT /api/pipelines/:id/steps/:agent` changes mode/gate;
 `POST /api/jobs/:id/run` runs a READY job explicitly.
+
+## QA rejection → revise loop (Phase 4)
+
+When the latest QA verdict is `rejected`, the content becomes **revisable** (if a
+plan exists). `POST /api/content/:id/revise/director` re-runs the Director with
+the QA issues (`{ script, revision: { issues, previousPlan } }`), producing
+`production_plan` v2+ → plan gate → QA v2. The Content tab shows the verdict +
+a **Revise plan** action. The guard returns `400` if the latest QA is approved.
 
 ## Tests / build
 

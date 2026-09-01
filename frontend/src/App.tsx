@@ -90,6 +90,11 @@ export function App() {
     [wrap],
   );
 
+  const revisePlan = useCallback(
+    (contentId: string) => wrap(api.revisePlan(contentId), 'Revision started — new plan queued'),
+    [wrap],
+  );
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'pipeline', label: 'Pipeline' },
@@ -145,6 +150,7 @@ export function App() {
             content={content}
             onStartPipeline={(id) => wrap(api.startPipeline(id), 'Pipeline started')}
             onRunJobs={() => wrap(api.runJobs(), 'Jobs drained')}
+            onRevisePlan={revisePlan}
             busy={busy}
           />
         )}
@@ -430,18 +436,20 @@ function StepCard({
     </Card>
   );
 }
-
 function ContentView({
   content,
   onStartPipeline,
   onRunJobs,
+  onRevisePlan,
   busy,
 }: {
   content: Content[];
   onStartPipeline: (id: string) => void;
   onRunJobs: () => void;
+  onRevisePlan: (id: string) => void;
   busy: boolean;
-}) {  return (
+}) {
+  return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <SectionTitle>Content ({content.length})</SectionTitle>
@@ -454,25 +462,61 @@ function ContentView({
       )}
       <div className="space-y-3">
         {content.map((c) => (
-          <Card key={c.id} className="p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold text-slate-100">{c.title ?? '(untitled idea)'}</div>
-                <div className="font-mono text-[11px] text-slate-500">
-                  {c.id} · {c.format ?? '—'} · {c.targetAge ?? '—'}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge tone={toneForStatus(c.status)}>{c.status}</Badge>
-                <Btn kind="primary" onClick={() => onStartPipeline(c.id)} disabled={busy}>
-                  Start pipeline
-                </Btn>
-              </div>
-            </div>
-          </Card>
+          <ContentCard key={c.id} c={c} onStartPipeline={onStartPipeline} onRevisePlan={onRevisePlan} busy={busy} />
         ))}
       </div>
     </div>
+  );
+}
+
+function ContentCard({
+  c,
+  onStartPipeline,
+  onRevisePlan,
+  busy,
+}: {
+  c: Content;
+  onStartPipeline: (id: string) => void;
+  onRevisePlan: (id: string) => void;
+  busy: boolean;
+}) {
+  const qa = c.latestQa;
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-semibold text-slate-100">{c.title ?? '(untitled idea)'}</div>
+          <div className="font-mono text-[11px] text-slate-500">
+            {c.id} · {c.format ?? '—'} · {c.targetAge ?? '—'}
+            {c.planVersion ? ` · plan v${c.planVersion}` : ''}
+          </div>
+          {qa && (
+            <div className="mt-2 max-w-xl space-y-1">
+              <span className={`text-[11px] font-semibold uppercase tracking-widest ${qa.status === 'rejected' ? 'text-red-400' : 'text-emerald-400'}`}>
+                QA {qa.status} · score {qa.score.toFixed(1)}
+              </span>
+              {qa.status === 'rejected' &&
+                qa.issues.slice(0, 3).map((i, n) => (
+                  <p key={n} className="text-xs text-slate-500">
+                    <span className="uppercase text-red-400/80">[{i.severity}]</span> {i.message}
+                  </p>
+                ))}
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge tone={toneForStatus(c.status)}>{c.status}</Badge>
+          {c.revisable && (
+            <Btn kind="danger" onClick={() => onRevisePlan(c.id)} disabled={busy} title="Re-run Director to revise the plan after QA rejection">
+              ↻ Revise plan
+            </Btn>
+          )}
+          <Btn kind="primary" onClick={() => onStartPipeline(c.id)} disabled={busy}>
+            Start pipeline
+          </Btn>
+        </div>
+      </div>
+    </Card>
   );
 }
 

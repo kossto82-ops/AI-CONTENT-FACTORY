@@ -124,9 +124,10 @@ export class Orchestrator {
     pipeline: PipelineDefinition,
     step: PipelineDefinition['steps'][number],
     dependencyJobId: string | null,
+    inputOverride?: unknown,
   ): JobRow {
     const content = contentRepo.get(contentId)!;
-    const input = buildInput(step.agent, content);
+    const input = inputOverride ?? buildInput(step.agent, content);
     const job: JobRow = {
       id: newId('job'),
       content_id: contentId,
@@ -265,6 +266,44 @@ export class Orchestrator {
       throw new Error(`Job ${jobId} is not runnable (status=${job.status})`);
     }
     return this.runOne(job, pipeline, true);
+  }
+
+  /**
+   * Revision loop (rollback path on QA rejection): re-run the Director step
+   * with the last QA issues so the plan is revised (production_plan v2+).
+   * Requires an existing plan AND a latest QA verdict that is 'rejected'.
+   * Returns the new director job id.
+   */
+  revisePlan(contentId: string, pipeline: PipelineDefinition): string {
+    const content = contentRepo.get(contentId);
+    if (!content) throw new Error('Content not found');
+
+    const scriptArt = latestArtefact(contentId, 'script');
+    if (!scriptArt) throw new Error('No script artifact for planning');
+    const planArt = latestArtefact(contentId, 'production_plan');
+    if (!planArt) throw new Error('No production plan to revise');
+    const qaArt = latestArtefact(contentId, 'qa');
+    if (!qaArt) throw new Error('No QA verdict — nothing to revise');
+    const verdict = safeJson(qaArt.payload) as { status?: string; issues?: { severity: string; category: string; message: string }[] };
+    if (verdict.status !== 'rejected') throw new Error('Latest QA verdict is not rejected — nothing to revise');
+
+    const step = pipeline.steps.find((s) => s.agent === 'director');
+    if (!step) throw new Error('Pipeline has no director step');
+
+    const lastDone = jobRepo
+      .listByContent(contentId)
+      .filter((j) => j.status === 'COMPLETED')
+      .pop();
+    const input = {
+      script: safeJson(scriptArt.payload),
+      revision: {
+        issues: verdict.issues ?? [],
+        previousPlan: safeJson(planArt.payload),
+      },
+    };
+    const job = this.touchStep(contentId, pipeline, step, lastDone?.id ?? null, input);
+    this.log(job, `Revision requested — reviving Director with QA feedback`);
+    return job.id;
   }
 
   /** Approve or reject a pending approval; resumes or halts the pipeline. */

@@ -81,6 +81,19 @@ function safeParse(s: string): unknown {
   }
 }
 
+/** Latest QA verdict (parsed) for a content, if any. */
+function latestQaSummary(contentId: string): {
+  status: string;
+  score: number;
+  issues: { severity: string; category: string; message: string }[];
+} | null {
+  const art = artifactRepo.latest(contentId, 'qa');
+  if (!art) return null;
+  const v = safeParse(art.payload) as { status?: string; score?: number; issues?: { severity: string; category: string; message: string }[] };
+  if (!v.status) return null;
+  return { status: v.status, score: v.score ?? 0, issues: v.issues ?? [] };
+}
+
 const statusCounts = (): Record<string, number> => {
   const rows = getDB()
     .prepare('SELECT status, COUNT(*) AS n FROM job GROUP BY status')
@@ -136,7 +149,18 @@ const routes: Route[] = [
     method: 'GET',
     match: /^\/api\/content$/,
     handler(_m, _req, res) {
-      sendJson(res, 200, { content: contentRepo.list().map(contentToApi) });
+      const content = contentRepo.list().map((c) => {
+        const base = contentToApi(c);
+        const qa = latestQaSummary(c.id);
+        const planArt = artifactRepo.latest(c.id, 'production_plan');
+        return {
+          ...base,
+          planVersion: planArt?.version ?? 0,
+          latestQa: qa ? { status: qa.status, score: qa.score, issues: qa.issues } : null,
+          revisable: qa?.status === 'rejected' && !!planArt,
+        };
+      });
+      sendJson(res, 200, { content });
     },
   },
   {
@@ -186,6 +210,21 @@ const routes: Route[] = [
       if (!contentRepo.get(contentId)) return sendJson(res, 404, { error: 'content not found' });
       const jobId = orchestrator.startPipeline(contentId, loadPipeline());
       sendJson(res, 200, { started: true, jobId, contentId });
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/api\/content\/([^/]+)\/revise\/director$/,
+    async handler(m, _req, res) {
+      const contentId = m[1]!;
+      if (!contentRepo.get(contentId)) return sendJson(res, 404, { error: 'content not found' });
+      try {
+        const jobId = orchestrator.revisePlan(contentId, loadPipeline());
+        await orchestrator.drain(loadPipeline());
+        sendJson(res, 200, { started: true, jobId, contentId, revision: true });
+      } catch (e) {
+        sendJson(res, 400, { error: e instanceof Error ? e.message : String(e) });
+      }
     },
   },
   {
