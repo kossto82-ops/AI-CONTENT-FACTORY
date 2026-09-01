@@ -3,9 +3,14 @@ import { config } from './config.js';
 import { getDB } from './db/database.js';
 import { contentRepo, jobRepo, approvalRepo, artifactRepo } from './db/repository.js';
 import { Orchestrator } from './orchestrator/orchestrator.js';
-import { DEFAULT_PIPELINE } from './pipeline.js';
 import { allRunners } from './agents/registry.js';
 import type { AgentMode } from './domain/types.js';
+import {
+  listPipelines,
+  loadPipeline,
+  pipelineToApi,
+  updateStepDefinition,
+} from './pipelineStore.js';
 
 const orchestrator = new Orchestrator();
 
@@ -179,7 +184,7 @@ const routes: Route[] = [
     handler(m, _req, res) {
       const contentId = m[1]!;
       if (!contentRepo.get(contentId)) return sendJson(res, 404, { error: 'content not found' });
-      const jobId = orchestrator.startPipeline(contentId, DEFAULT_PIPELINE);
+      const jobId = orchestrator.startPipeline(contentId, loadPipeline());
       sendJson(res, 200, { started: true, jobId, contentId });
     },
   },
@@ -187,7 +192,7 @@ const routes: Route[] = [
     method: 'POST',
     match: /^\/api\/jobs\/run$/,
     async handler(_m, _req, res) {
-      const progressed = await orchestrator.drain(DEFAULT_PIPELINE);
+      const progressed = await orchestrator.drain(loadPipeline());
       sendJson(res, 200, { drained: true, progressed });
     },
   },
@@ -223,10 +228,10 @@ const routes: Route[] = [
       try {
         orchestrator.decideApproval(
           { approvalId: m[1]!, status, decision: body.decision ? String(body.decision) : undefined },
-          DEFAULT_PIPELINE,
+          loadPipeline(),
         );
         if (status === 'APPROVED') {
-          await orchestrator.drain(DEFAULT_PIPELINE);
+          await orchestrator.drain(loadPipeline());
         }
         sendJson(res, 200, { decided: true, status });
       } catch (e) {
@@ -238,7 +243,45 @@ const routes: Route[] = [
     method: 'GET',
     match: /^\/api\/pipelines$/,
     handler(_m, _req, res) {
-      sendJson(res, 200, { pipeline: DEFAULT_PIPELINE });
+      sendJson(res, 200, {
+        pipelines: listPipelines().map((p) => ({ id: p.id, name: p.name })),
+        active: pipelineToApi(loadPipeline()),
+      });
+    },
+  },
+  {
+    method: 'PUT',
+    match: /^\/api\/pipelines\/([^/]+)\/steps\/([^/]+)$/,
+    async handler(m, req, res) {
+      const pipelineId = m[1]!;
+      const agent = m[2]!;
+      const body = await readJson(req);
+      try {
+        const updated = updateStepDefinition({
+          pipelineId,
+          agent,
+          mode: body.mode as AgentMode | undefined,
+          requiresApproval:
+            body.requiresApproval === undefined ? undefined : Boolean(body.requiresApproval),
+          approvalKind: body.approvalKind as any,
+        });
+        sendJson(res, 200, { pipeline: pipelineToApi(updated) });
+      } catch (e) {
+        sendJson(res, 400, { error: e instanceof Error ? e.message : String(e) });
+      }
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/api\/jobs\/([^/]+)\/run$/,
+    async handler(m, _req, res) {
+      const jobId = m[1]!;
+      try {
+        const done = await orchestrator.runJob(jobId, loadPipeline());
+        sendJson(res, 200, { ran: true, progressed: done, jobId });
+      } catch (e) {
+        sendJson(res, 400, { error: e instanceof Error ? e.message : String(e) });
+      }
     },
   },
 ];
@@ -274,7 +317,7 @@ export function startServer(): ReturnType<typeof createServer> {
 
     // CORS for the Vite dev server (localhost:5173).
     res.setHeader('access-control-allow-origin', '*');
-    res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+    res.setHeader('access-control-allow-methods', 'GET,POST,PUT,OPTIONS');
     res.setHeader('access-control-allow-headers', 'content-type');
     if (method === 'OPTIONS') {
       res.writeHead(204);

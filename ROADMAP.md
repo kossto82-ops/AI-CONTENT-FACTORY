@@ -29,10 +29,25 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
 - E2E proven: UI path (proxy -> API -> orchestrator -> gateway) ran
   Research -> gates(idea/script/plan) -> QA; QA approved (0.9); 4 jobs; €0.003.
 
-## Phase 3 — Research + Script
+## Phase 3 — Research + Script + Configurable Modes (DONE, `AICF-003`)
 - Research Agent (idea discovery, trend/format analysis, structured proposals).
 - Script Agent (script v{N}).
 - Manual/Semi modes + approval gates wired end-to-end.
+- **Configurable execution modes**: per-step `mode` (AUTOMATIC / SEMI_AUTOMATIC /
+  MANUAL) + approval-gate toggle, persisted in the `pipeline` table
+  (`pipelineStore`, Decision D-10 now implemented). Pipelines-as-data live, not
+  just declared.
+- New API: `GET /api/pipelines` (persisted + active), `PUT /api/pipelines/:id/
+  steps/:agent` (mode/gate), `POST /api/jobs/:id/run` (explicit manual run,
+  bypasses the MANUAL auto-skip guard).
+- Control Center: new **Pipeline** tab with per-step mode select + gate toggle;
+  a ▶ Run button on READY jobs.
+- Orchestrator: `runJob` public API; `createNextStep` now resolves the next step
+  by job owner agent instead of approval kind (fixes custom `approvalKind`).
+- E2E via UI proxy (fresh test DB): script step set to MANUAL+no-gate -> after
+  idea approval the script job stayed READY (manual does not auto-advance) -> ▶
+  Run executed it explicitly -> `script v1` COMPLETED, pipeline halted (no
+  director materialized). Cost ~€0.0016 for the manual script run.
 
 ## Phase 4 — Director
 - Director Agent: script -> ProductionPlan (Scene[] contract).

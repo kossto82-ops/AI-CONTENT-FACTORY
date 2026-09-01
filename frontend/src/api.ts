@@ -58,6 +58,27 @@ export interface Dashboard {
   recentJobs: Job[];
 }
 
+export type AgentMode = 'MANUAL' | 'SEMI_AUTOMATIC' | 'AUTOMATIC';
+
+export interface PipelineStep {
+  order: number;
+  agent: string;
+  mode?: AgentMode;
+  requiresApproval?: boolean;
+  approvalKind?: string;
+}
+
+export interface Pipeline {
+  id: string;
+  name: string;
+  steps: PipelineStep[];
+}
+
+export interface PipelinesResponse {
+  pipelines: { id: string; name: string }[];
+  active: Pipeline;
+}
+
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { 'content-type': 'application/json' },
@@ -83,7 +104,18 @@ export const api = {
       artifacts: { kind: string; version: number; payload: unknown; createdAt: string }[];
     }>(`/api/content/${id}`),
   approvals: () => req<{ approvals: Approval[] }>('/api/approvals'),
-  pipelines: () => req<{ pipeline: { id: string; name: string; steps: unknown[] } }>('/api/pipelines'),
+  pipelines: () => req<PipelinesResponse>('/api/pipelines'),
+  updatePipelineStep: (
+    pipelineId: string,
+    agent: string,
+    patch: { mode?: AgentMode; requiresApproval?: boolean; approvalKind?: string },
+  ) =>
+    req<{ pipeline: Pipeline }>(`/api/pipelines/${pipelineId}/steps/${agent}`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
+  runJob: (jobId: string) =>
+    req<{ ran: boolean; progressed: boolean; jobId: string }>(`/api/jobs/${jobId}/run`, { method: 'POST' }),
   createContent: (topic?: string, targetAge?: string) =>
     req<{ id: string }>('/api/content', {
       method: 'POST',

@@ -123,6 +123,11 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
   redeploying; aligns with "don't create agents by fashion" — only add steps
   with real responsibility.
 - **Trade-offs**: requires a pipeline editor/schema and validation.
+- **Status**: IMPLEMENTED (Phase 3, `AICF-003`) — `pipelineStore` persists the
+  definition in the `pipeline` table; per-step `mode` + `requiresApproval`
+  editable via `PUT /api/pipelines/:id/steps/:agent`; MANUAL steps run via
+  `POST /api/jobs/:id/run`. E2E-verified (MANUAL script step stayed READY,
+  explicit run completed it).
 - **Reversibility**: medium.
 
 ---

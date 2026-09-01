@@ -1,6 +1,7 @@
 # AI Content Factory — Architecture
 
-Status: PROPOSED (Phase 2). Control Center UI E2E-verified against live gateway.
+Status: PROPOSED (Phase 3). Control Center + configurable pipeline modes
+E2E-verified against live gateway.
 
 ## 1. Purpose
 
@@ -81,6 +82,10 @@ recoverable. Humans approve at defined gateways.
   enforces approval gates, emits events.
 - Stateless between commands: every transition is reloaded from the store, so
   a crash can resume (idempotent state machine).
+- Mode-aware: AUTOMATIC drains through gates, SEMI-AUTOMATIC halts for
+  approval, MANUAL stays `READY` until an explicit `runJob`. Pipeline
+  definitions (steps, modes, gates) are loaded from the persisted `pipeline`
+  table (`pipelineStore`) — pipelines-as-data, configurable from the UI.
 
 ### 4.4 Agents
 - Specialized units, each with a clear single responsibility.
@@ -143,10 +148,11 @@ step is persisted and versioned before the next step reads it.
 
 ## 9. Orchestration
 
-- Pipeline definition = ordered list of agent steps + optional approval gates.
+- Pipeline definition = ordered list of agent steps + optional approval gates,
+  persisted as JSON in the `pipeline` table and editable via the API/UI.
 - Orchestrator walks the pipeline, materializing Jobs, respecting modes
   (AUTOMATIC passes gates; SEMI-AUTOMATIC stops for approval; MANUAL waits for
-  explicit trigger).
+  explicit trigger via `runJob`).
 - Pause/stop/resume/retry are commands that translate to state transitions.
 - Idempotent: re-running from a persisted state produces no duplicate work.
 

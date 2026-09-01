@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Agent, type Approval, type Content, type Dashboard } from './api';
+import {
+  api,
+  type Agent,
+  type AgentMode,
+  type Approval,
+  type Content,
+  type Dashboard,
+  type Pipeline,
+  type PipelineStep,
+} from './api';
 import { Badge, Btn, Card, SectionTitle, Stat, toneForStatus } from './ui';
 
-type Tab = 'dashboard' | 'agents' | 'content' | 'approvals';
+type Tab = 'dashboard' | 'agents' | 'content' | 'approvals' | 'pipeline';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -11,22 +20,25 @@ export function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [content, setContent] = useState<Content[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [d, a, c, ap] = await Promise.all([
+      const [d, a, c, ap, p] = await Promise.all([
         api.dashboard(),
         api.agents(),
         api.content(),
         api.approvals(),
+        api.pipelines(),
       ]);
       setDash(d);
       setAgents(a.agents);
       setContent(c.content);
       setApprovals(ap.approvals);
+      setPipeline(p.active);
       setApiOk(true);
       setError(null);
     } catch (e) {
@@ -62,8 +74,25 @@ export function App() {
     [refresh, notify],
   );
 
+  const saveStep = useCallback(
+    (agent: string, patch: { mode?: AgentMode; requiresApproval?: boolean }) => {
+      if (!pipeline) return;
+      wrap(
+        api.updatePipelineStep(pipeline.id, agent, patch),
+        `Step ${agent} updated`,
+      );
+    },
+    [wrap, pipeline],
+  );
+
+  const runManualJob = useCallback(
+    (jobId: string) => wrap(api.runJob(jobId), 'Job run'),
+    [wrap],
+  );
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'pipeline', label: 'Pipeline' },
     { id: 'agents', label: 'Agents' },
     { id: 'content', label: 'Content' },
     { id: 'approvals', label: `Approvals${approvals.length ? ` (${approvals.length})` : ''}` },
@@ -103,10 +132,14 @@ export function App() {
               wrap(api.createContent('curiosity and friendship for young children', '4-7'), 'Idea created')
             }
             onRunJobs={() => wrap(api.runJobs(), 'Jobs drained')}
+            onRunManualJob={runManualJob}
             busy={busy}
           />
         )}
         {tab === 'agents' && <AgentsView agents={agents} />}
+        {tab === 'pipeline' && (
+          <PipelineView pipeline={pipeline} onSaveStep={saveStep} busy={busy} />
+        )}
         {tab === 'content' && (
           <ContentView
             content={content}
@@ -183,12 +216,14 @@ function DashboardView({
   approvals,
   onStartIdea,
   onRunJobs,
+  onRunManualJob,
   busy,
 }: {
   dash: Dashboard | null;
   approvals: Approval[];
   onStartIdea: () => void;
   onRunJobs: () => void;
+  onRunManualJob: (jobId: string) => void;
   busy: boolean;
 }) {
   const counts = dash?.counts ?? {};
@@ -240,7 +275,18 @@ function DashboardView({
                 <span className="truncate font-mono text-xs text-slate-400">
                   {j.type} <span className="text-slate-600">{j.id.slice(0, 10)}</span>
                 </span>
-                <Badge tone={toneForStatus(j.status)}>{j.status}</Badge>
+                <span className="flex items-center gap-2">
+                  <Badge tone={toneForStatus(j.status)}>{j.status}</Badge>
+                  {j.status === 'READY' && (
+                    <button
+                      onClick={() => onRunManualJob(j.id)}
+                      disabled={busy}
+                      className="rounded-md border border-ink-700 px-2 py-0.5 text-[11px] font-medium text-slate-300 transition hover:bg-ink-700 disabled:opacity-40"
+                    >
+                      ▶ Run
+                    </button>
+                  )}
+                </span>
               </div>
             ))}
           </div>
@@ -306,6 +352,85 @@ function AgentsView({ agents }: { agents: Agent[] }) {
   );
 }
 
+function PipelineView({
+  pipeline,
+  onSaveStep,
+  busy,
+}: {
+  pipeline: Pipeline | null;
+  onSaveStep: (agent: string, patch: { mode?: AgentMode; requiresApproval?: boolean }) => void;
+  busy: boolean;
+}) {
+  if (!pipeline) {
+    return <Card className="p-6 text-sm text-slate-500">No pipeline loaded.</Card>;
+  }
+  return (
+    <div className="space-y-4">
+      <div>
+        <SectionTitle>Pipeline — {pipeline.name}</SectionTitle>
+        <p className="mt-1 text-xs text-slate-500">
+          Per-step execution mode (AUTO / SEMI / MANUAL) and approval gates. Changes persist and
+          apply to the next started pipeline.
+        </p>
+      </div>
+      <div className="space-y-3">
+        {pipeline.steps.map((s) => (
+          <StepCard key={s.agent} step={s} onSaveStep={onSaveStep} busy={busy} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StepCard({
+  step,
+  onSaveStep,
+  busy,
+}: {
+  step: PipelineStep;
+  onSaveStep: (agent: string, patch: { mode?: AgentMode; requiresApproval?: boolean }) => void;
+  busy: boolean;
+}) {
+  const mode = step.mode ?? 'AUTOMATIC';
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-semibold capitalize text-slate-100">{step.agent}</div>
+          <div className="text-[11px] uppercase tracking-widest text-slate-500">
+            gate · {step.approvalKind ?? '—'}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-slate-400">
+            Mode
+            <select
+              className="rounded-md border border-ink-700 bg-ink-800 px-2 py-1 text-sm text-slate-200"
+              value={mode}
+              onChange={(e) => onSaveStep(step.agent, { mode: e.target.value as AgentMode })}
+              disabled={busy}
+            >
+              <option value="AUTOMATIC">AUTOMATIC</option>
+              <option value="SEMI_AUTOMATIC">SEMI_AUTOMATIC</option>
+              <option value="MANUAL">MANUAL</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-400">
+            <input
+              type="checkbox"
+              checked={Boolean(step.requiresApproval)}
+              onChange={(e) => onSaveStep(step.agent, { requiresApproval: e.target.checked })}
+              disabled={busy}
+              className="h-4 w-4 accent-accent-500"
+            />
+            Approval gate
+          </label>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function ContentView({
   content,
   onStartPipeline,
@@ -316,8 +441,7 @@ function ContentView({
   onStartPipeline: (id: string) => void;
   onRunJobs: () => void;
   busy: boolean;
-}) {
-  return (
+}) {  return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <SectionTitle>Content ({content.length})</SectionTitle>

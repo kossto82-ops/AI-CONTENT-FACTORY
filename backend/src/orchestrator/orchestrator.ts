@@ -183,14 +183,14 @@ export class Orchestrator {
   }
 
   /** Run a single READY job (or retry a FAILED one). */
-  async runOne(job: JobRow, pipeline: PipelineDefinition): Promise<boolean> {
+  async runOne(job: JobRow, pipeline: PipelineDefinition, force = false): Promise<boolean> {
     if (job.status === 'READY' || job.status === 'FAILED') {
       const runner = getRunner(job.type as AgentType);
       const step = pipeline.steps.find((s) => s.agent === job.type);
 
-      // MANUAL mode: don't auto-run; leave it READY.
+      // MANUAL mode: don't auto-run; leave it READY (unless explicitly forced).
       const mode = this.effectiveMode((step?.agent ?? job.type) as AgentType, step?.mode);
-      if (mode === 'MANUAL' && job.status === 'READY') return false;
+      if (mode === 'MANUAL' && job.status === 'READY' && !force) return false;
 
       transitionJob(job, 'RUNNING');
       this.log(job, `RUNNING ${runner.name}`);
@@ -254,6 +254,19 @@ export class Orchestrator {
     return false;
   }
 
+  /**
+   * Explicitly run a single READY/FAILED job, bypassing the MANUAL guard.
+   * Used by the Control Center to advance manual-mode steps one at a time.
+   */
+  async runJob(jobId: string, pipeline: PipelineDefinition): Promise<boolean> {
+    const job = jobRepo.get(jobId);
+    if (!job) throw new Error(`Job not found: ${jobId}`);
+    if (job.status !== 'READY' && job.status !== 'FAILED') {
+      throw new Error(`Job ${jobId} is not runnable (status=${job.status})`);
+    }
+    return this.runOne(job, pipeline, true);
+  }
+
   /** Approve or reject a pending approval; resumes or halts the pipeline. */
   decideApproval(opts: DecideApprovalOptions, pipeline: PipelineDefinition): void {
     const approval = approvalRepo.get(opts.approvalId);
@@ -274,7 +287,8 @@ export class Orchestrator {
       // Do NOT advance content here — content advancement happens when each
       // step completes (in afterCompletion / createNextStepIfAuto). Approval
       // just unblocks the pipeline.
-      this.createNextStep(approval.content_id, pipeline, approval.kind);
+      const afterAgent = job?.type ?? this.agentForApprovalKind(approval.kind);
+      this.createNextStep(approval.content_id, pipeline, afterAgent);
     } else if (opts.status === 'REJECTED') {
       // Stop this branch; user may edit/restart. Content stays at current stage.
       if (job) {
@@ -285,9 +299,22 @@ export class Orchestrator {
 
   // ---------------- internals ----------------
 
-  private createNextStep(contentId: string, pipeline: PipelineDefinition, afterKind: string): void {
-    const steps = activeSteps(pipeline);
-    const currentIdx = steps.findIndex((s) => defaultApprovalKind(s.agent) === afterKind);
+  /** Map an approval kind to the agent whose artifact triggered it. */
+  private agentForApprovalKind(kind: string): string {
+    switch (kind) {
+      case 'idea':
+        return 'research';
+      case 'script':
+        return 'script';
+      case 'plan':
+        return 'director';
+      default:
+        return 'qa';
+    }
+  }
+
+  private createNextStep(contentId: string, pipeline: PipelineDefinition, afterAgent: string): void {    const steps = activeSteps(pipeline);
+    const currentIdx = steps.findIndex((s) => s.agent === afterAgent);
     const next = steps[currentIdx + 1];
     if (!next) {
       eventBus.emit({

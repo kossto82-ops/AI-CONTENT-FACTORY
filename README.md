@@ -11,7 +11,7 @@ video rendering.
 | `ARCHITECTURE.md` | Components, layers, data flow, model gateway, orchestration |
 | `PRODUCT.md` | Vision, users, agents, pipelines, HITL, lifecycle |
 | `DECISIONS.md` | Technical decisions + trade-offs; what we deliberately do NOT need |
-| `ROADMAP.md` | Phase 0..11 plan (Phase 1 Foundation done; Phase 2 Control Center done) |
+| `ROADMAP.md` | Phase 0..11 plan (Phases 1-3 done: Foundation, Control Center, Configurable modes) |
 
 ## Stack (MVP)
 
@@ -19,8 +19,8 @@ video rendering.
 - SQLite via Node's built-in `node:sqlite` (no DB server, no native deps)
 - Model Gateway = thin adapter over the local **OmniRoute** gateway
   (`http://127.0.0.1:20128`), task-based routing, cost accounting
-- Frontend Control Center: Vite + React + Tailwind v4 (Dashboard / Agents /
-  Content / Approvals)
+- Frontend Control Center: Vite + React + Tailwind v4 (Dashboard / Pipeline /
+  Agents / Content / Approvals)
 
 ## Run
 
@@ -47,6 +47,14 @@ Research -> [APPROVE ideas] -> Script -> [APPROVE] -> Director -> [APPROVE] -> Q
 
 Each creative step halts for human approval (SEMI-AUTOMATIC); QA runs
 AUTOMATIC. Jobs, approvals, artifacts and cost are persisted and recoverable.
+
+## Execution modes (per step)
+
+Each pipeline step can be set to **AUTOMATIC** / **SEMI_AUTOMATIC** / **MANUAL**
+plus an approval-gate toggle from the **Pipeline** tab. Config persists in the
+`pipeline` table; MANUAL steps stay `READY` until you run them explicitly (▶ Run
+button on the Dashboard). `PUT /api/pipelines/:id/steps/:agent` changes mode/gate;
+`POST /api/jobs/:id/run` runs a READY job explicitly.
 
 ## Tests / build
 
