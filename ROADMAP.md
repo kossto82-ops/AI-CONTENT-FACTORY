@@ -7,7 +7,7 @@ we prove orchestration before production/rendering.
 Audit environment (Node 26, Python 3.14, Git, OmniRoute live on :20128, no
 Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
 
-## Phase 1 — Foundation
+## Phase 1 — Foundation (DONE, `AICF-001`)
 - Monorepo scaffold: `backend` (Node+TS), `frontend`, shared types.
 - Store: SQLite schema + migrations (Content, Job, Agent, Approval, Execution,
   Cost, Pipeline, Model/Provider registry).
@@ -15,11 +15,19 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
 - Job system: state machine, persistence, retries, logs.
 - Orchestrator: create/run jobs, dependencies, approval gates, resume.
 - Minimal CLI to drive it (before UI).
+- E2E proven via CLI against live gateway (`The Lost Star Mystery`, cost €0.0025).
 
-## Phase 2 — Control Center
-- Backend HTTP API + auth gate.
-- Frontend: Dashboard, Agents, Jobs, Pipelines views; start/pause/stop/resume/
-  retry/approve/reject controls.
+## Phase 2 — Control Center (DONE)
+- Backend HTTP API (`backend/src/server.ts`): `node:http` + CORS. Endpoints:
+  `GET /api/dashboard`, `GET /api/agents`, `GET|POST /api/content`,
+  `GET /api/content/:id`, `POST /api/pipeline/:id/start`, `POST /api/jobs/run`,
+  `GET /api/jobs/:id`, `GET /api/approvals`,
+  `POST /api/approvals/:id/decide`, `GET /api/pipelines`.
+- Frontend: Vite + React + Tailwind v4 (`frontend/`), tabbed Control Center:
+  Dashboard / Agents / Content / Approvals, live polling (~4s), create idea,
+  start pipeline, run jobs, approve/reject. Dev proxy `/api` -> :8787.
+- E2E proven: UI path (proxy -> API -> orchestrator -> gateway) ran
+  Research -> gates(idea/script/plan) -> QA; QA approved (0.9); 4 jobs; €0.003.
 
 ## Phase 3 — Research + Script
 - Research Agent (idea discovery, trend/format analysis, structured proposals).

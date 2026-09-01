@@ -1,6 +1,6 @@
 # AI Content Factory — Architecture
 
-Status: PROPOSED (Phase 2). Awaiting approval before implementation.
+Status: PROPOSED (Phase 2). Control Center UI E2E-verified against live gateway.
 
 ## 1. Purpose
 
@@ -154,9 +154,10 @@ step is persisted and versioned before the next step reads it.
 
 - Backend: Node + TypeScript (single service: API + Orchestrator in-process,
   or split if it grows). MVP keeps one process for simplicity.
-- Frontend: Next.js (or Vite React) + a component lib; "AI ops center" aesthetic.
-- Storage: SQLite via better-sqlite3 for MVP (no DB server to install, single
-  file, transactions, WAL). No ORM; thin repository layer.
+- Frontend: Vite + React + Tailwind v4 (confirmed); "AI ops center" aesthetic,
+  dark, dense, status-first. Vite dev server proxies `/api` -> backend :8787.
+- Storage: SQLite via Node's built-in `node:sqlite` (MVP, single file,
+  transactions, WAL). No ORM; thin repository layer.
 
 ## 11. Storage
 

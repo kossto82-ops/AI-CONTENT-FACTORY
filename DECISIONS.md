@@ -29,11 +29,13 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
 
 ## D-03 — SQLite for the store (MVP)
 
-- **Decision**: SQLite via better-sqlite3, no ORM, thin repository layer.
-- **Alternatives**: PostgreSQL, MongoDB, MySQL, JSON-files.
+- **Decision**: SQLite via Node's built-in `node:sqlite` (`DatabaseSync`), no
+  ORM, thin repository layer.
+- **Alternatives**: PostgreSQL, MongoDB, MySQL, JSON-files, better-sqlite3.
 - **Reason**: Nothing DB is installed; SQLite is a single file, transactional,
   WAL, zero-ops — perfect for a control-plane state store. Avoids installing a
-  DB server ("nothing unnecessary").
+  DB server ("nothing unnecessary"). `node:sqlite` is built into Node 22+ (we're
+  on 26) → **zero native npm deps** and no install step.
 - **Trade-offs**: single-writer (fine for orchestrator), less ideal for heavy
   concurrent analytics (later concern).
 - **Reversibility**: medium-high — a thin repository layer makes swapping to
@@ -78,13 +80,16 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
   interface.
 - **Reversibility**: high.
 
-## D-07 — Frontend Next.js + component library
+## D-07 — Frontend Vite + React + Tailwind v4 (CONFIRMED)
 
-- **Decision**: Next.js (Vite React acceptable fallback) + a UI component lib
-  (Shadcn/ui-style), "AI ops center" aesthetic, dark, dense, status-first.
-- **Alternatives**: separate SPA (Vite), server-rendered, plain HTML.
-- **Reason**: Browsers (Chrome/Edge) available for E2E later; React ecosystem is
-  fast to build operator UIs; no extra runtime needed beyond Node.
+- **Decision**: Vite + React 19 + Tailwind v4 (via `@tailwindcss/vite`), plain
+  component primitives, "AI ops center" aesthetic, dark, dense, status-first.
+  Dev server proxies `/api` -> backend :8787.
+- **Alternatives**: Next.js (server-rendered), separate SPA, plain HTML.
+- **Reason**: User confirmed Vite+React over Next.js. Fast Vite HMR, zero SSR
+  complexity for an operator dashboard, and the API is already a separate
+  service so there is no need for server rendering. Tailwind v4 is CSS-first
+  (no config file needed).
 - **Trade-offs**: frontend adds surface; but the Control Center is the product's
   core UX so it is not optional.
 - **Reversibility**: medium (UI framework swap cost is contained behind the API).
