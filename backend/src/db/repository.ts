@@ -1,0 +1,414 @@
+import { getDB } from './database.js';
+import type {
+  AgentMode,
+  AgentStatus,
+  ApprovalKind,
+  ApprovalStatus,
+  ContentStatus,
+  JobStatus,
+} from '../domain/types.js';
+import { nowIso } from '../domain/types.js';
+
+// ---------------- Schema-shaped row types ----------------
+
+export interface JobRow {
+  id: string;
+  content_id: string | null;
+  pipeline_id: string | null;
+  type: string;
+  agent_id: string | null;
+  status: JobStatus;
+  input: string;
+  output: string | null;
+  parent_job: string | null;
+  dependency: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  attempt: number;
+  max_retries: number;
+  error: string | null;
+  model: string | null;
+  provider: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  cost_eur: number;
+  trace: string;
+}
+
+export interface ContentRow {
+  id: string;
+  title: string | null;
+  target_age: string | null;
+  format: string | null;
+  hook: string | null;
+  status: ContentStatus;
+  current_version: number;
+  meta: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApprovalRow {
+  id: string;
+  content_id: string | null;
+  job_id: string | null;
+  kind: ApprovalKind;
+  status: ApprovalStatus;
+  request_reason: string | null;
+  decision: string | null;
+  decided_at: string | null;
+  created_at: string;
+}
+
+export interface ArtifactRow {
+  id: string;
+  content_id: string;
+  kind: string;
+  version: number;
+  payload: string;
+  source_job_id: string | null;
+  created_at: string;
+}
+
+export interface AgentRow {
+  id: string;
+  name: string;
+  mode: AgentMode;
+  status: AgentStatus;
+  enabled: number;
+  tier: string;
+  config: string;
+  created_at: string;
+}
+
+export interface ExecutionRow {
+  id: string;
+  job_id: string;
+  agent_id: string | null;
+  model: string | null;
+  provider: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  cost_eur: number;
+  started_at: string | null;
+  ended_at: string | null;
+  error: string | null;
+}
+
+export interface EventRow {
+  type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  payload: string;
+  created_at: string;
+}
+
+// ---------------- Row mappers ----------------
+// node:sqlite returns rows as Record<string, SQLOutputValue>; map them to the
+// typed row shapes (enforcing enum status fields) instead of unsafe casts.
+
+type SqlRow = Record<string, unknown>;
+
+export function mapJob(r: SqlRow): JobRow {
+  return {
+    id: String(r.id),
+    content_id: r.content_id == null ? null : String(r.content_id),
+    pipeline_id: r.pipeline_id == null ? null : String(r.pipeline_id),
+    type: String(r.type),
+    agent_id: r.agent_id == null ? null : String(r.agent_id),
+    status: r.status as JobStatus,
+    input: String(r.input),
+    output: r.output == null ? null : String(r.output),
+    parent_job: r.parent_job == null ? null : String(r.parent_job),
+    dependency: r.dependency == null ? null : String(r.dependency),
+    created_at: String(r.created_at),
+    started_at: r.started_at == null ? null : String(r.started_at),
+    completed_at: r.completed_at == null ? null : String(r.completed_at),
+    attempt: Number(r.attempt),
+    max_retries: Number(r.max_retries),
+    error: r.error == null ? null : String(r.error),
+    model: r.model == null ? null : String(r.model),
+    provider: r.provider == null ? null : String(r.provider),
+    tokens_in: Number(r.tokens_in),
+    tokens_out: Number(r.tokens_out),
+    cost_eur: Number(r.cost_eur),
+    trace: String(r.trace),
+  };
+}
+
+export function mapContent(r: SqlRow): ContentRow {
+  return {
+    id: String(r.id),
+    title: r.title == null ? null : String(r.title),
+    target_age: r.target_age == null ? null : String(r.target_age),
+    format: r.format == null ? null : String(r.format),
+    hook: r.hook == null ? null : String(r.hook),
+    status: r.status as ContentStatus,
+    current_version: Number(r.current_version),
+    meta: String(r.meta),
+    created_at: String(r.created_at),
+    updated_at: String(r.updated_at),
+  };
+}
+
+export function mapApproval(r: SqlRow): ApprovalRow {
+  return {
+    id: String(r.id),
+    content_id: r.content_id == null ? null : String(r.content_id),
+    job_id: r.job_id == null ? null : String(r.job_id),
+    kind: r.kind as ApprovalKind,
+    status: r.status as ApprovalStatus,
+    request_reason: r.request_reason == null ? null : String(r.request_reason),
+    decision: r.decision == null ? null : String(r.decision),
+    decided_at: r.decided_at == null ? null : String(r.decided_at),
+    created_at: String(r.created_at),
+  };
+}
+
+export function mapArtifact(r: SqlRow): ArtifactRow {
+  return {
+    id: String(r.id),
+    content_id: String(r.content_id),
+    kind: String(r.kind),
+    version: Number(r.version),
+    payload: String(r.payload),
+    source_job_id: r.source_job_id == null ? null : String(r.source_job_id),
+    created_at: String(r.created_at),
+  };
+}
+
+export function mapAgent(r: SqlRow): AgentRow {
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    mode: r.mode as AgentMode,
+    status: r.status as AgentStatus,
+    enabled: Number(r.enabled),
+    tier: String(r.tier),
+    config: String(r.config),
+    created_at: String(r.created_at),
+  };
+}
+
+export function mapExecution(r: SqlRow): ExecutionRow {
+  return {
+    id: String(r.id),
+    job_id: String(r.job_id),
+    agent_id: r.agent_id == null ? null : String(r.agent_id),
+    model: r.model == null ? null : String(r.model),
+    provider: r.provider == null ? null : String(r.provider),
+    tokens_in: Number(r.tokens_in),
+    tokens_out: Number(r.tokens_out),
+    cost_eur: Number(r.cost_eur),
+    started_at: r.started_at == null ? null : String(r.started_at),
+    ended_at: r.ended_at == null ? null : String(r.ended_at),
+    error: r.error == null ? null : String(r.error),
+  };
+}
+
+// ---------------- JobRepository ----------------
+
+export const jobRepo = {
+  insert(j: JobRow): void {
+    getDB()
+      .prepare(
+        `INSERT INTO job
+         (id, content_id, pipeline_id, type, agent_id, status, input, output, parent_job,
+          dependency, created_at, started_at, completed_at, attempt, max_retries, error,
+          model, provider, tokens_in, tokens_out, cost_eur, trace)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        j.id, j.content_id, j.pipeline_id, j.type, j.agent_id, j.status, j.input, j.output,
+        j.parent_job, j.dependency, j.created_at, j.started_at, j.completed_at, j.attempt,
+        j.max_retries, j.error, j.model, j.provider, j.tokens_in, j.tokens_out, j.cost_eur, j.trace,
+      );
+  },
+
+  get(id: string): JobRow | undefined {
+    const r = getDB().prepare('SELECT * FROM job WHERE id = ?').get(id) as SqlRow | undefined;
+    return r ? mapJob(r) : undefined;
+  },
+
+  listByContent(contentId: string): JobRow[] {
+    return (getDB()
+      .prepare('SELECT * FROM job WHERE content_id = ? ORDER BY created_at')
+      .all(contentId) as SqlRow[]).map(mapJob);
+  },
+
+  listByStatus(status: JobStatus): JobRow[] {
+    return (getDB().prepare('SELECT * FROM job WHERE status = ?').all(status) as SqlRow[]).map(mapJob);
+  },
+
+  updateStatus(job: JobRow): void {
+    getDB()
+      .prepare(
+        `UPDATE job SET status=?, started_at=?, completed_at=?, attempt=?, error=?,
+         model=?, provider=?, tokens_in=?, tokens_out=?, cost_eur=?, output=?, trace=?
+         WHERE id=?`,
+      )
+      .run(
+        job.status, job.started_at, job.completed_at, job.attempt, job.error,
+        job.model, job.provider, job.tokens_in, job.tokens_out, job.cost_eur, job.output,
+        job.trace, job.id,
+      );
+  },
+
+  updateAttempt(id: string, attempt: number): void {
+    getDB().prepare('UPDATE job SET attempt=? WHERE id=?').run(attempt, id);
+  },
+
+  /** Jobs that are READY/PENDING and waiting to run, whose dependency is satisfied. */
+  runnable(): JobRow[] {
+    return (getDB()
+      .prepare(
+        `SELECT * FROM job
+         WHERE status IN ('READY','PENDING')
+           AND (dependency IS NULL OR dependency = '' OR
+                dependency IN (SELECT j2.id FROM job j2 WHERE j2.id = job.dependency AND j2.status='COMPLETED'))`,
+      )
+      .all() as SqlRow[]).map(mapJob);
+  },
+};
+
+// ---------------- ContentRepository ----------------
+
+export const contentRepo = {
+  insert(c: ContentRow): void {
+    getDB()
+      .prepare(
+        `INSERT INTO content
+         (id, title, target_age, format, hook, status, current_version, meta, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        c.id, c.title, c.target_age, c.format, c.hook, c.status, c.current_version,
+        c.meta, c.created_at, c.updated_at,
+      );
+  },
+
+  get(id: string): ContentRow | undefined {
+    const r = getDB().prepare('SELECT * FROM content WHERE id = ?').get(id) as SqlRow | undefined;
+    return r ? mapContent(r) : undefined;
+  },
+
+  list(): ContentRow[] {
+    return (getDB().prepare('SELECT * FROM content ORDER BY created_at').all() as SqlRow[]).map(mapContent);
+  },
+
+  setStatus(id: string, status: ContentStatus): void {
+    getDB()
+      .prepare('UPDATE content SET status=?, updated_at=? WHERE id=?')
+      .run(status, nowIso(), id);
+  },
+
+  updateMeta(id: string, meta: string): void {
+    getDB().prepare('UPDATE content SET meta=?, updated_at=? WHERE id=?').run(meta, nowIso(), id);
+  },
+
+  patch(c: ContentRow): void {
+    getDB()
+      .prepare(
+        `UPDATE content SET title=?, target_age=?, format=?, hook=?, status=?,
+         current_version=?, meta=?, updated_at=? WHERE id=?`,
+      )
+      .run(
+        c.title, c.target_age, c.format, c.hook, c.status, c.current_version, c.meta,
+        nowIso(), c.id,
+      );
+  },
+};
+
+// ---------------- ApprovalRepository ----------------
+
+export const approvalRepo = {
+  insert(a: ApprovalRow): void {
+    getDB()
+      .prepare(
+        `INSERT INTO approval (id, content_id, job_id, kind, status, request_reason, decision, decided_at, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        a.id, a.content_id, a.job_id, a.kind, a.status, a.request_reason, a.decision,
+        a.decided_at, a.created_at,
+      );
+  },
+
+  pending(kind: ApprovalKind): ApprovalRow[] {
+    return (getDB()
+      .prepare("SELECT * FROM approval WHERE status='PENDING' AND kind=?")
+      .all(kind) as SqlRow[]).map(mapApproval);
+  },
+
+  get(id: string): ApprovalRow | undefined {
+    const r = getDB().prepare('SELECT * FROM approval WHERE id = ?').get(id) as SqlRow | undefined;
+    return r ? mapApproval(r) : undefined;
+  },
+
+  listPending(): ApprovalRow[] {
+    return (getDB().prepare("SELECT * FROM approval WHERE status='PENDING'").all() as SqlRow[]).map(
+      mapApproval,
+    );
+  },
+
+  setDecision(id: string, status: ApprovalStatus, decision: string): void {
+    getDB()
+      .prepare('UPDATE approval SET status=?, decision=?, decided_at=? WHERE id=?')
+      .run(status, decision, nowIso(), id);
+  },
+};
+
+// ---------------- ArtifactRepository ----------------
+
+export const artifactRepo = {
+  nextVersion(contentId: string, kind: string): number {
+    const r = getDB()
+      .prepare('SELECT COALESCE(MAX(version),0)+1 AS v FROM artifact WHERE content_id=? AND kind=?')
+      .get(contentId, kind) as { v: number };
+    return r.v;
+  },
+
+  insert(a: ArtifactRow): void {
+    getDB()
+      .prepare(
+        `INSERT INTO artifact (id, content_id, kind, version, payload, source_job_id, created_at)
+         VALUES (?,?,?,?,?,?,?)`,
+      )
+      .run(a.id, a.content_id, a.kind, a.version, a.payload, a.source_job_id, a.created_at);
+  },
+
+  latest(contentId: string, kind: string): ArtifactRow | undefined {
+    const r = getDB()
+      .prepare(
+        'SELECT * FROM artifact WHERE content_id=? AND kind=? ORDER BY version DESC LIMIT 1',
+      )
+      .get(contentId, kind) as SqlRow | undefined;
+    return r ? mapArtifact(r) : undefined;
+  },
+};
+
+// ---------------- Execution Repository ----------------
+
+export const executionRepo = {
+  insert(e: ExecutionRow): void {
+    getDB()
+      .prepare(
+        `INSERT INTO execution (id, job_id, agent_id, model, provider, tokens_in, tokens_out,
+          cost_eur, started_at, ended_at, error)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        e.id, e.job_id, e.agent_id, e.model, e.provider, e.tokens_in, e.tokens_out,
+        e.cost_eur, e.started_at, e.ended_at, e.error,
+      );
+  },
+};
+
+// ---------------- Event persistence ----------------
+
+export function persistEvent(evt: EventRow): void {
+  getDB()
+    .prepare('INSERT INTO event (type, entity_type, entity_id, payload, created_at) VALUES (?,?,?,?,?)')
+    .run(evt.type, evt.entity_type, evt.entity_id, evt.payload, evt.created_at);
+}
