@@ -30,6 +30,7 @@ export type ContentStatus =
   | 'QA'
   | 'APPROVED_FOR_PUBLISH'
   | 'PUBLISHED'
+  | 'SCHEDULED'
   | 'ANALYZED';
 
 export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';

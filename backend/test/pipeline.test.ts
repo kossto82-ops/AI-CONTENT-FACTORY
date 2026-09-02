@@ -15,6 +15,7 @@ describe('pipeline store', () => {
       'voice',
       'assembly',
       'qa',
+      'publisher',
     ]);
   });
 
@@ -41,9 +42,9 @@ describe('pipeline store', () => {
 
   it('resolves default modes per agent when no override', () => {
     const p = loadPipeline(DEFAULT_PIPELINE.id);
-    // research/qa/assembly default AUTOMATIC, creative steps inherit SEMI via pipeline.ts default
     expect(p.steps[0]!.agent).toBe('research');
     expect(p.steps[6]!.agent).toBe('qa');
+    expect(p.steps[7]!.agent).toBe('publisher');
   });
 
   it('reconciles a stale stored pipeline (missing injected steps) without clobbering overrides', () => {
@@ -68,11 +69,13 @@ describe('pipeline store', () => {
       'voice',
       'assembly',
       'qa',
+      'publisher',
     ]);
     // Operator override on script survives reconciliation.
     expect(p.steps.find((s) => s.agent === 'script')!.mode).toBe('MANUAL');
     // Injected steps come from the code default.
     expect(p.steps.find((s) => s.agent === 'visual')).toBeDefined();
     expect(p.steps.find((s) => s.agent === 'assembly')).toBeDefined();
+    expect(p.steps.find((s) => s.agent === 'publisher')).toBeDefined();
   });
 });

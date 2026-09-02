@@ -88,6 +88,19 @@ export interface AssemblyManifest {
   costEur: number;
 }
 
+export interface PublishPackage {
+  status: 'SCHEDULED' | 'PUBLISHED';
+  title: string;
+  description: string;
+  hashtags: string[];
+  accessibilityLabel: string;
+  thumbnailUri: string;
+  target: string;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  version: number;
+}
+
 export interface Content {
   id: string;
   title: string | null;
@@ -110,6 +123,7 @@ export interface Content {
   assetScenes?: { sceneId: string; file: string }[];
   audioScenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[];
   assemblyManifest?: AssemblyManifest | null;
+  publishPackage?: PublishPackage | null;
 }
 
 export interface Approval {
@@ -184,6 +198,7 @@ export const api = {
       jobs: Job[];
       approvals: Approval[];
       artifacts: { kind: string; version: number; payload: unknown; createdAt: string }[];
+      publishPackage?: PublishPackage | null;
     }>(`/api/content/${id}`),
   approvals: () => req<{ approvals: Approval[] }>('/api/approvals'),
   pipelines: () => req<PipelinesResponse>('/api/pipelines'),
@@ -210,6 +225,11 @@ export const api = {
     }),
   startPipeline: (contentId: string) =>
     req<{ started: boolean; jobId: string }>(`/api/pipeline/${contentId}/start`, { method: 'POST' }),
+  schedule: (contentId: string, scheduledAt: string | null) =>
+    req<{ contentId: string; scheduledAt: string | null }>(`/api/content/${contentId}/schedule`, {
+      method: 'PUT',
+      body: JSON.stringify({ scheduledAt }),
+    }),
   runJobs: () => req<{ drained: boolean; progressed: boolean }>('/api/jobs/run', { method: 'POST' }),
   decideApproval: (approvalId: string, status: string, decision?: string) =>
     req<{ decided: boolean; status: string }>(`/api/approvals/${approvalId}/decide`, {

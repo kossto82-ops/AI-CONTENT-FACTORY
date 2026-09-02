@@ -31,7 +31,7 @@ export interface PipelineDefinition {
 /** The default brain-first pipeline (Section 20). */
 export const DEFAULT_PIPELINE: PipelineDefinition = {
   id: 'pipeline_brain',
-  name: 'Brain-First (Research -> Script -> Director -> Visual -> Voice -> Assembly -> QA)',
+  name: 'Brain-First (Research -> Script -> Director -> Visual -> Voice -> Assembly -> QA -> Publish)',
   steps: [
     { order: 1, agent: 'research', requiresApproval: true, approvalKind: 'idea' },
     { order: 2, agent: 'script', requiresApproval: true, approvalKind: 'script' },
@@ -40,12 +40,13 @@ export const DEFAULT_PIPELINE: PipelineDefinition = {
     { order: 5, agent: 'voice' },
     { order: 6, agent: 'assembly' },
     { order: 7, agent: 'qa' },
+    { order: 8, agent: 'publisher', requiresApproval: true, approvalKind: 'publication' },
   ],
 };
 
 /** Resolve the effective agent default mode for a step type. */
 export function defaultAgentMode(agent: AgentType): AgentMode {
-  // Research/QA/Visual/Voice/Assembly default to AUTOMATIC; creative
+  // Research/QA/Visual/Voice/Assembly/Publisher default to AUTOMATIC; creative
   // (script/director) default to SEMI_AUTOMATIC (human gate on the artifact).
   switch (agent) {
     case 'research':
@@ -53,6 +54,7 @@ export function defaultAgentMode(agent: AgentType): AgentMode {
     case 'visual':
     case 'voice':
     case 'assembly':
+    case 'publisher':
       return 'AUTOMATIC';
     default:
       return 'SEMI_AUTOMATIC';

@@ -58,6 +58,18 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
         voice: latestArtefact(content.id, 'voice') ? safeJson(latestArtefact(content.id, 'voice')!.payload) : null,
       };
     }
+    case 'publisher': {
+      const planArt = latestArtefact(content.id, 'production_plan');
+      if (!planArt) throw new Error('No production plan for publisher');
+      // An optional ISO date can be supplied per content (e.g. via meta) to
+      // schedule rather than publish immediately.
+      const scheduledAt = (safeJson(content.meta, {}) as { scheduledAt?: string }).scheduledAt ?? null;
+      return {
+        plan: safeJson(planArt.payload),
+        contentId: content.id,
+        scheduledAt,
+      };
+    }
     case 'visual': {
       const planArt = latestArtefact(content.id, 'production_plan');
       if (!planArt) throw new Error('No production plan for visual');
@@ -434,6 +446,18 @@ export class Orchestrator {
     // Advance content to this step's stage (regardless of gating).
     if (step && job.content_id) {
       advanceContent(job.content_id, stageFor(job.type as AgentType));
+      // The Publisher flips to PUBLISHED (or SCHEDULED via meta).
+      if (job.type === 'publisher' && job.output) {
+        const pkg = safeJson(job.output) as { status?: string };
+        const pushState = pkg.status === 'SCHEDULED' ? 'SCHEDULED' : 'PUBLISHED';
+        const c = contentRepo.get(job.content_id);
+        if (c) {
+          const meta = safeJson(c.meta, {});
+          meta.publishStatus = pushState;
+          contentRepo.updateMeta(job.content_id, JSON.stringify(meta));
+          advanceContent(job.content_id, pushState);
+        }
+      }
     }
 
     if (needsGate && job.content_id) {
@@ -592,6 +616,8 @@ function stageFor(agent: AgentType): import('../domain/types.js').ContentStatus 
       return 'ASSEMBLED';
     case 'qa':
       return 'QA';
+    case 'publisher':
+      return 'APPROVED_FOR_PUBLISH';
   }
 }
 
@@ -612,6 +638,8 @@ function defaultArtifactKind(agent: AgentType): string | undefined {
       return 'video';
     case 'qa':
       return 'qa';
+    case 'publisher':
+      return 'publish_package';
   }
 }
 
@@ -632,6 +660,8 @@ function defaultApprovalKind(agent: AgentType): string {
       return 'video';
     case 'qa':
       return 'video';
+    case 'publisher':
+      return 'publication';
   }
 }
 

@@ -185,6 +185,8 @@ const routes: Route[] = [
           : null;
         const videoArt = artifactRepo.latest(c.id, 'video');
         const assemblyManifest = videoArt ? safeParse(videoArt.payload) : null;
+        const publishArt = artifactRepo.latest(c.id, 'publish_package');
+        const publishPackage = publishArt ? safeParse(publishArt.payload) : null;
         return {
           ...base,
           planVersion: planArt?.version ?? 0,
@@ -195,6 +197,7 @@ const routes: Route[] = [
           assetScenes: assetManifest?.scenes ?? [],
           audioScenes: audioManifest?.scenes ?? [],
           assemblyManifest,
+          publishPackage,
         };
       });
       sendJson(res, 200, { content });
@@ -226,10 +229,12 @@ const routes: Route[] = [
       const artifacts = getDB()
         .prepare('SELECT kind, version, payload, created_at FROM artifact WHERE content_id=? ORDER BY kind, version')
         .all(id) as any[];
+      const publishArt = artifactRepo.latest(id, 'publish_package');
       sendJson(res, 200, {
         content: contentToApi(c),
         jobs,
         approvals: approvals.map(approvalToApi),
+        publishPackage: publishArt ? safeParse(publishArt.payload) : null,
         artifacts: artifacts.map((a) => ({
           kind: a.kind,
           version: a.version,
@@ -299,6 +304,26 @@ const routes: Route[] = [
         const jobId = orchestrator.revisePlan(contentId, loadPipeline());
         await orchestrator.drain(loadPipeline());
         sendJson(res, 200, { started: true, jobId, contentId, revision: true });
+      } catch (e) {
+        sendJson(res, 400, { error: e instanceof Error ? e.message : String(e) });
+      }
+    },
+  },
+  {
+    method: 'PUT',
+    match: /^\/api\/content\/([^/]+)\/schedule$/,
+    async handler(m, req, res) {
+      const contentId = m[1]!;
+      const c = contentRepo.get(contentId);
+      if (!c) return sendJson(res, 404, { error: 'content not found' });
+      const body = await readJson(req);
+      const scheduledAt = body.scheduledAt === undefined || body.scheduledAt === null ? null : String(body.scheduledAt);
+      try {
+        const meta = safeParse(c.meta) as Record<string, unknown>;
+        if (scheduledAt === null) delete meta.scheduledAt;
+        else meta.scheduledAt = scheduledAt;
+        contentRepo.updateMeta(contentId, JSON.stringify(meta));
+        sendJson(res, 200, { contentId, scheduledAt });
       } catch (e) {
         sendJson(res, 400, { error: e instanceof Error ? e.message : String(e) });
       }
@@ -421,6 +446,7 @@ function agentDefaultMode(type: string): AgentMode {
     case 'visual':
     case 'voice':
     case 'assembly':
+    case 'publisher':
       return 'AUTOMATIC';
     default:
       return 'SEMI_AUTOMATIC';

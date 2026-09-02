@@ -131,9 +131,30 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
   `approved` (1.0) over a real assembled video; both plan-consistency and
   deterministic media checks green.
 
-## Phase 9 — Publisher
-- Publisher Agent: title, description, hashtags, metadata, thumbnail;
-  publish/schedule; optional + disableable.
+## Phase 9 — Publisher (DONE, `AICF-010`; publication is logical/reflected, no upload)
+- Publisher Agent (`publisher` step after QA, gated by a `publication` approval):
+  derives **rich publish metadata** from the ProductionPlan — `title` (≤100),
+  `description` (≤500, hook + scene count + duration), `hashtags` (≤3, dedup,
+  fallback), web-accessibility `accessibilityLabel`, and `thumbnailUri` (the
+  assembly poster, `/api/assets/{contentId}/poster.png`) — as a
+  `publish_package` artifact (Decision D-17).
+- **Logical publication, no real upload** (no ffmpeg/hosting/platform API): the
+  package declares a `target` (`LocalExport` default) and a `status` of
+  `PUBLISHED` (immediate) or `SCHEDULED`. Scheduling is **metadata only** — a
+  `scheduledAt` field (settable via `PUT /api/content/:id/schedule`) carried in
+  the package and mirrored to content `meta`; there is no runner/timer that
+  executes it (explicitly out of scope).
+- Orchestrator: `buildInput('publisher')` reads the plan (+ optional
+  `scheduledAt` from meta), `afterCompletion` flips the content to
+  `PUBLISHED`/`SCHEDULED` and records `meta.publishStatus`.
+- `ContentStatus` gains `SCHEDULED` (after `PUBLISHED` in `CONTENT_ORDER`).
+- Control Center: Publish panel per content (title, description, hashtags,
+  thumbnail, target, status, publishedAt/scheduledAt); `publish_package` exposed
+  via `GET /api/content` and `GET /api/content/:id`.
+- E2E proven (fresh DB, real orchestrator): immediate path → content `PUBLISHED`
+  (`meta.publishStatus=PUBLISHED`, `publishedAt` set); scheduled path → content
+  `SCHEDULED` (`scheduledAt` set); both gated by the `publication` approval and
+  surfaced as `publish_package` v1. Publisher is deterministic (no gateway).
 
 ## Phase 10 — Analytics
 - Analytics Agent: performance analysis, feed Learning Agent.

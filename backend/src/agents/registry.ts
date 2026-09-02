@@ -6,12 +6,21 @@ import { qaAgent } from './qa.js';
 import { visualAgent } from './visual.js';
 import { voiceAgent } from './voice.js';
 import { assemblyAgent } from './assembly.js';
+import { publisherAgent, type PublishInput } from './publisher.js';
 import type { Idea, ProductionPlan, Script } from './contracts.js';
 import type { AssetsManifest } from './visual.js';
 import type { VoiceManifest } from './voice.js';
 import type { FinalVideoManifest } from './assembly.js';
 
-export type AgentType = 'research' | 'script' | 'director' | 'visual' | 'voice' | 'assembly' | 'qa';
+export type AgentType =
+  | 'research'
+  | 'script'
+  | 'director'
+  | 'visual'
+  | 'voice'
+  | 'assembly'
+  | 'qa'
+  | 'publisher';
 
 /** Normalized result every agent returns for a Job. */
 export interface AgentRunResult {
@@ -107,6 +116,20 @@ const runners: Record<AgentType, AgentRunner> = {
       return { data: out.verdict, usage: out.usage, model: out.model, provider: out.provider, artifactKind: 'qa' };
     },
   },
+  publisher: {
+    type: 'publisher',
+    name: 'Publisher Agent',
+    async run(input) {
+      const out = publisherAgent(input as PublishInput);
+      return {
+        data: out.package,
+        usage: { tokensIn: 0, tokensOut: 0, requests: 0, costEur: out.costEur },
+        artifactKind: 'publish_package',
+        model: out.model,
+        provider: out.provider,
+      };
+    },
+  },
 };
 
 export type ScriptInput = Parameters<typeof scriptAgent>[0];
@@ -115,6 +138,7 @@ export type VisualInput = Parameters<typeof visualAgent>[0];
 export type VoiceInput = Parameters<typeof voiceAgent>[0];
 export type AssemblyInput = Parameters<typeof assemblyAgent>[0];
 export type QaInput = Parameters<typeof qaAgent>[0];
+export type PublisherInput = PublishInput;
 
 export function getRunner(type: AgentType): AgentRunner {
   const r = runners[type];

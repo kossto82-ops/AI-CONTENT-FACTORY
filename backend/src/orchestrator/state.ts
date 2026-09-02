@@ -35,6 +35,7 @@ const CONTENT_ORDER: ContentStatus[] = [
   'QA',
   'APPROVED_FOR_PUBLISH',
   'PUBLISHED',
+  'SCHEDULED',
   'ANALYZED',
 ];
 

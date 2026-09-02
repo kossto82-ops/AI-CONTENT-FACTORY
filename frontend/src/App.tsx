@@ -10,6 +10,7 @@ import {
   type Pipeline,
   type PipelineStep,
   type QaChecklist,
+  type PublishPackage,
 } from './api';
 import { Badge, Btn, Card, SectionTitle, Stat, toneForStatus } from './ui';
 
@@ -510,6 +511,42 @@ function QaChecklistGrid({ checklist }: { checklist: QaChecklist }) {
   );
 }
 
+function PublishPanel({ pkg }: { pkg: PublishPackage }) {
+  const tone = pkg.status === 'PUBLISHED' ? 'text-emerald-400' : 'text-sky-400';
+  return (
+    <div className="mt-3 max-w-xl space-y-1 rounded border border-slate-800 bg-slate-900/50 p-3">
+      <div className="flex items-center gap-2">
+        <span className={`text-[11px] font-semibold uppercase tracking-widest ${tone}`}>Publish</span>
+        <span className="text-[11px] text-slate-400">{pkg.status}</span>
+        <span className="ml-auto font-mono text-[10px] text-slate-500">→ {pkg.target}</span>
+      </div>
+      <div className="text-sm font-medium text-slate-100">{pkg.title}</div>
+      {pkg.thumbnailUri && (
+        <img
+          src={pkg.thumbnailUri}
+          alt="thumbnail"
+          className="h-16 w-9 rounded border border-slate-700 object-cover"
+          loading="lazy"
+        />
+      )}
+      <p className="text-xs text-slate-500">{pkg.description}</p>
+      {pkg.hashtags.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {pkg.hashtags.map((h) => (
+            <span key={h} className="rounded bg-sky-500/10 px-1.5 py-0.5 font-mono text-[10px] text-sky-400">
+              #{h}
+            </span>
+          ))}
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500">{pkg.accessibilityLabel}</p>
+      <div className="font-mono text-[10px] text-slate-600">
+        {pkg.publishedAt ? `published ${pkg.publishedAt}` : pkg.scheduledAt ? `scheduled ${pkg.scheduledAt}` : `v${pkg.version}`}
+      </div>
+    </div>
+  );
+}
+
 function ContentCard({
   c,
   onStartPipeline,
@@ -586,6 +623,7 @@ function ContentCard({
             </div>
           )}
           {video && <FinalVideoPreview content={c} video={video} />}
+          {c.publishPackage && <PublishPanel pkg={c.publishPackage} />}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone={toneForStatus(c.status)}>{c.status}</Badge>

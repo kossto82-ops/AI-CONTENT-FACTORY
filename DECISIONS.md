@@ -294,6 +294,40 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
 
 ---
 
+## D-17 — Publication is logical/reflected (a `publish_package` artifact); scheduling is metadata-only
+
+- **Decision**: Phase 9's Publisher makes publishing **logical, not real**. With
+  no ffmpeg, hosting, or platform account (see D-14 — the "video" is composition
+  DATA), the publisher does **not upload anywhere**. Instead it derives rich
+  publish metadata from the ProductionPlan — `title` (≤100), `description`
+  (≤500: hook + scene count + duration), `hashtags` (≤3, dedup, `['story']`
+  fallback), web-accessibility `accessibilityLabel`, and `thumbnailUri` (the
+  assembly poster via `/api/assets/{contentId}/poster.png`) — into a single
+  `publish_package` artifact declaring `status: PUBLISHED|SCHEDULED`, `target`
+  (`LocalExport` default), `scheduledAt`, `publishedAt`, `version`.
+- **Scheduling is a field, not a worker.** `ContentStatus` gains `SCHEDULED`
+  (after `PUBLISHED` in `CONTENT_ORDER`); a `scheduledAt` (ISO) can be set via
+  `PUT /api/content/:id/schedule`, is picked up by `buildInput('publisher')`
+  from content `meta`, and is mirrored back to `meta.publishStatus` +
+  `scheduledAt`. There is deliberately **no timer/runner that executes
+  scheduled publication** — reflecting the "no real upload" boundary.
+- **Alternatives**: real API upload (impossible — no platform/hosting, D-14), or
+  a scheduler/worker that "publishes" later (over-engineering; nothing executes
+  a logical publish in MVP).
+- **Reason**: keeps publish an optional, disableable 8th pipeline step with an
+  honest contract, E2E-verifiable without external infrastructure.
+- **Trade-offs**: `status`/`scheduledAt` are logical intent; a future Phase
+  would swap the resolver for a real upload. The `publication` approval gate
+  (like the other gates) advances content optimistically then holds the job at
+  WAITING_APPROVAL until approved.
+- **Status**: IMPLEMENTED (Phase 9, `AICF-010`). Publisher is deterministic (no
+  gateway). E2E-verified through the real orchestrator: immediate → content
+  `PUBLISHED` (`publishedAt` set, `meta.publishStatus=PUBLISHED`); scheduled →
+  content `SCHEDULED` (`scheduledAt` set).
+- **Reversibility**: high.
+
+---
+
 ## Environment findings feeding decisions
 
 - Running: **OmniRoute** at `http://127.0.0.1:20128` — task combos + 400+ models

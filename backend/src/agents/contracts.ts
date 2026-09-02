@@ -109,3 +109,28 @@ export const qaVerdictSchema = z.object({
   summary: z.string().optional(),
 });
 export type QaVerdict = z.infer<typeof qaVerdictSchema>;
+
+/**
+ * Phase 9 Publisher — rich publish metadata + logical publication (Decision
+ * D-17). Includes everything a platform publishes for a Short: title,
+ * description, hashtags, web accessibility (aria) label, and the thumbnail URI
+ * (the assembly poster, served via `GET /api/assets/{contentId}/{poster}`).
+ */
+export const publishPackageSchema = z.object({
+  status: z.enum(['SCHEDULED', 'PUBLISHED']),
+  title: z.string(),
+  description: z.string(),
+  hashtags: z.array(z.string()),
+  accessibilityLabel: z.string(),
+  thumbnailUri: z.string(),
+  /** Platform/consumer the media was prepared for (not a real upload in MVP). */
+  target: z.enum(['LocalExport', 'YouTube', 'Instagram']),
+  /** ISO timestamp; when non-null the package is scheduled. No runner executes it. */
+  scheduledAt: z.string().nullable(),
+  publishedAt: z.string().nullable(),
+  version: z.number(),
+});
+export type PublishPackage = z.infer<typeof publishPackageSchema>;
+
+/** Resolves a content thumbnail URI for the publish package (served by the asset route). */
+export type AssetUriResolver = (contentId: string) => string;
