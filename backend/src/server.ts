@@ -90,13 +90,30 @@ function safeParse(s: string): unknown {
 function latestQaSummary(contentId: string): {
   status: string;
   score: number;
-  issues: { severity: string; category: string; message: string }[];
+  issues: { severity: string; category: string; message: string; location?: string; suggestedFix?: string; autoFixable?: boolean }[];
+  checklist?: Record<string, boolean | null>;
+  reviewScope?: Record<string, boolean>;
+  summary?: string;
 } | null {
   const art = artifactRepo.latest(contentId, 'qa');
   if (!art) return null;
-  const v = safeParse(art.payload) as { status?: string; score?: number; issues?: { severity: string; category: string; message: string }[] };
+  const v = safeParse(art.payload) as {
+    status?: string;
+    score?: number;
+    issues?: { severity: string; category: string; message: string; location?: string; suggestedFix?: string; autoFixable?: boolean }[];
+    checklist?: Record<string, boolean | null>;
+    reviewScope?: Record<string, boolean>;
+    summary?: string;
+  };
   if (!v.status) return null;
-  return { status: v.status, score: v.score ?? 0, issues: v.issues ?? [] };
+  return {
+    status: v.status,
+    score: v.score ?? 0,
+    issues: v.issues ?? [],
+    checklist: v.checklist,
+    reviewScope: v.reviewScope,
+    summary: v.summary,
+  };
 }
 
 const statusCounts = (): Record<string, number> => {
@@ -171,7 +188,9 @@ const routes: Route[] = [
         return {
           ...base,
           planVersion: planArt?.version ?? 0,
-          latestQa: qa ? { status: qa.status, score: qa.score, issues: qa.issues } : null,
+          latestQa: qa
+            ? { status: qa.status, score: qa.score, issues: qa.issues, checklist: qa.checklist, reviewScope: qa.reviewScope, summary: qa.summary }
+            : null,
           revisable: qa?.status === 'rejected' && !!planArt,
           assetScenes: assetManifest?.scenes ?? [],
           audioScenes: audioManifest?.scenes ?? [],

@@ -23,6 +23,30 @@ export interface QaIssue {
   severity: string;
   category: string;
   message: string;
+  location?: string;
+  suggestedFix?: string;
+  autoFixable?: boolean;
+}
+
+export interface QaChecklist {
+  duration_ok: boolean | null;
+  resolution_ok: boolean | null;
+  vertical_9_16: boolean | null;
+  audio_clean: boolean | null;
+  subtitles_present: boolean | null;
+  clips_ok: boolean | null;
+  visuals_clean: boolean | null;
+  continuity_ok: boolean | null;
+  coherence_ok: boolean | null;
+  appropriateness_ok: boolean | null;
+  metadata_complete: boolean | null;
+}
+
+export interface QaReviewScope {
+  technical: boolean;
+  planConsistency: boolean;
+  plan: boolean;
+  vision: boolean;
 }
 
 export interface FinalVideoScene {
@@ -74,7 +98,14 @@ export interface Content {
   currentVersion: number;
   createdAt: string;
   planVersion?: number;
-  latestQa?: { status: string; score: number; issues: QaIssue[] } | null;
+  latestQa?: {
+    status: string;
+    score: number;
+    issues: QaIssue[];
+    checklist?: QaChecklist;
+    reviewScope?: QaReviewScope;
+    summary?: string;
+  } | null;
   revisable?: boolean;
   assetScenes?: { sceneId: string; file: string }[];
   audioScenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[];

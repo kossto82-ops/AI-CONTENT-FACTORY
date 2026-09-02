@@ -56,15 +56,56 @@ export const productionPlanSchema = z.object({
 });
 export type ProductionPlan = z.infer<typeof productionPlanSchema>;
 
+/** Severity levels; `high` forces a rejection regardless of the average score. */
+export const qaIssueSchema = z.object({
+  severity: z.enum(['low', 'medium', 'high']),
+  category: z.string(), // duration | resolution | format | audio | subtitles | visual | continuity | coherence | appropriateness | metadata | structure | other
+  message: z.string(),
+  /** Scene id / timestamp / section the issue refers to (optional). */
+  location: z.string().optional(),
+  /** What should change and which agent should do it (optional). */
+  suggestedFix: z.string().optional(),
+  /** Whether the orchestrator can fix it by re-running an agent (optional). */
+  autoFixable: z.boolean().optional(),
+});
+export type QaIssue = z.infer<typeof qaIssueSchema>;
+
+/**
+ * Result checklist for the Phase 8 review matrix. `null` = the dimension was
+ * NOT checked this run (e.g. vision-dependent checks when the model pass was
+ * skipped); `true`/`false` = checked and passed/failed.
+ */
+export const qaChecklistSchema = z.object({
+  duration_ok: z.boolean().nullable(),
+  resolution_ok: z.boolean().nullable(),
+  vertical_9_16: z.boolean().nullable(),
+  audio_clean: z.boolean().nullable(),
+  subtitles_present: z.boolean().nullable(),
+  clips_ok: z.boolean().nullable(),
+  visuals_clean: z.boolean().nullable(),
+  continuity_ok: z.boolean().nullable(),
+  coherence_ok: z.boolean().nullable(),
+  appropriateness_ok: z.boolean().nullable(),
+  metadata_complete: z.boolean().nullable(),
+});
+export type QaChecklist = z.infer<typeof qaChecklistSchema>;
+
+/** Which review dimensions actually ran (transparency; stub runs skip model passes). */
+export const qaReviewScopeSchema = z.object({
+  technical: z.boolean(), // deterministic file/timeline/media checks
+  planConsistency: z.boolean(), // plan-internal consistency (data only)
+  plan: z.boolean(), // live LLM review of the plan/narration
+  vision: z.boolean(), // live vision pass over the actual images
+});
+export type QaReviewScope = z.infer<typeof qaReviewScopeSchema>;
+
 export const qaVerdictSchema = z.object({
   status: z.enum(['approved', 'rejected']),
   score: z.number(),
-  issues: z.array(
-    z.object({
-      severity: z.enum(['low', 'medium', 'high']),
-      category: z.string(),
-      message: z.string(),
-    }),
-  ),
+  issues: z.array(qaIssueSchema),
+  checklist: qaChecklistSchema.optional(),
+  reviewScope: qaReviewScopeSchema.optional(),
+  /** 2-4 sentence overall assessment for the operator. */
+  summary: z.string().optional(),
 });
 export type QaVerdict = z.infer<typeof qaVerdictSchema>;

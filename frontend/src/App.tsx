@@ -9,6 +9,7 @@ import {
   type Dashboard,
   type Pipeline,
   type PipelineStep,
+  type QaChecklist,
 } from './api';
 import { Badge, Btn, Card, SectionTitle, Stat, toneForStatus } from './ui';
 
@@ -470,6 +471,45 @@ function ContentView({
   );
 }
 
+const QA_CHECKLIST_LABELS: { key: keyof QaChecklist; label: string }[] = [
+  { key: 'duration_ok', label: 'Duration' },
+  { key: 'resolution_ok', label: 'Resolution' },
+  { key: 'vertical_9_16', label: 'Vertical 9:16' },
+  { key: 'audio_clean', label: 'Audio' },
+  { key: 'subtitles_present', label: 'Subtitles' },
+  { key: 'clips_ok', label: 'Clips' },
+  { key: 'visuals_clean', label: 'Visual' },
+  { key: 'continuity_ok', label: 'Continuity' },
+  { key: 'coherence_ok', label: 'Coherence' },
+  { key: 'appropriateness_ok', label: 'Appropriate' },
+  { key: 'metadata_complete', label: 'Metadata' },
+];
+
+function QaChecklistGrid({ checklist }: { checklist: QaChecklist }) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {QA_CHECKLIST_LABELS.map(({ key, label }) => {
+        const v = checklist[key];
+        return (
+          <span
+            key={key}
+            title={`${label}: ${v === null ? 'not checked' : v ? 'pass' : 'fail'}`}
+            className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+              v === null
+                ? 'bg-ink-800 text-slate-600'
+                : v
+                  ? 'bg-emerald-500/10 text-emerald-400'
+                  : 'bg-red-500/10 text-red-400'
+            }`}
+          >
+            {v === null ? '—' : v ? '✓' : '✕'} {label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function ContentCard({
   c,
   onStartPipeline,
@@ -492,15 +532,21 @@ function ContentCard({
             {c.id} Â· {c.format ?? 'â€”'} Â· {c.targetAge ?? 'â€”'}
             {c.planVersion ? ` Â· plan v${c.planVersion}` : ''}
           </div>
-          {qa && (
+{qa && (
             <div className="mt-2 max-w-xl space-y-1">
               <span className={`text-[11px] font-semibold uppercase tracking-widest ${qa.status === 'rejected' ? 'text-red-400' : 'text-emerald-400'}`}>
-                QA {qa.status} Â· score {qa.score.toFixed(1)}
+                QA {qa.status} · score {qa.score.toFixed(1)}
               </span>
+              {qa.summary && <p className="text-xs text-slate-500">{qa.summary}</p>}
+              {qa.checklist && (
+                <QaChecklistGrid checklist={qa.checklist} />
+              )}
               {qa.status === 'rejected' &&
                 qa.issues.slice(0, 3).map((i, n) => (
                   <p key={n} className="text-xs text-slate-500">
-                    <span className="uppercase text-red-400/80">[{i.severity}]</span> {i.message}
+                    <span className="uppercase text-red-400/80">[{i.severity}]</span>{' '}
+                    <span className="capitalize text-slate-400">{i.category}</span>
+                    {i.location ? <span className="font-mono text-[10px] text-slate-600"> · {i.location}</span> : null} {i.message}
                   </p>
                 ))}
             </div>

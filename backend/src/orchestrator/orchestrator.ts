@@ -49,7 +49,14 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
       const planArt = latestArtefact(content.id, 'production_plan');
       if (!planArt) throw new Error('No production plan for QA');
       const c = content;
-      return { plan: safeJson(planArt.payload), scriptTitle: c.title };
+      return {
+        plan: safeJson(planArt.payload),
+        scriptTitle: c.title,
+        contentId: content.id,
+        video: latestArtefact(content.id, 'video') ? safeJson(latestArtefact(content.id, 'video')!.payload) : null,
+        assets: latestArtefact(content.id, 'assets') ? safeJson(latestArtefact(content.id, 'assets')!.payload) : null,
+        voice: latestArtefact(content.id, 'voice') ? safeJson(latestArtefact(content.id, 'voice')!.payload) : null,
+      };
     }
     case 'visual': {
       const planArt = latestArtefact(content.id, 'production_plan');

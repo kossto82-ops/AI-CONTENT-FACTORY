@@ -107,10 +107,29 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
   QA; content `ASSEMBLED`; 4 scenes, 30s normalized timeline, 4 GIF clips
   (GIF89a, ~216KB) + `subtitles.vtt` + poster served with correct MIME.
 
-## Phase 8 — QA
-- QA Agent: automated review (duration, resolution, vertical, audio, subtitles,
-  visual errors, coherence, continuity, appropriateness, metadata) -> verdict.
-- Vision models via OmniRoute for visual QA.
+## Phase 8 — QA (DONE, `AICF-009`; live vision model review UNPROVEN)
+- QA Agent (`qa` step after Assembly, before publish): automated, deterministic
+  review of duration, resolution, vertical 9:16, audio, subtitles, clip/visual
+  errors, timeline continuity, plan-internal structure/coherence, metadata ->
+  verdict (`approved` / `rejected`), score, categorized issues, and an 11-point
+  checklist (`QaChecklist`, `null` = not checked).
+- **New vision gateway channel** `POST /v1/messages`
+  (`gateway/vision.ts`, Anthropic-style image blocks) routed to
+  `auto/vision`; reads real still-images from the content asset dir. **Honest
+  stub default** (D-16, same rule as D-15): `OMNIROUTE_QA_STUB=1` (default)
+  runs only deterministic technical + plan-consistency checks; `=0` activates a
+  **live plan review** (`quality.review`) plus **live vision review** of the
+  stills, both gated on the gateway being up. **Live vision UNPROVEN** —
+  OmniRoute :20128 is currently down, so the vision pass has not been validated
+  round-trip; the pipeline runs fully with the stub.
+- Orchestrator feeds `video` (FinalVideoManifest), `assets`, `voice`, plan +
+  contentId to the QA step; verdict persisted as the `qa` artifact; plan/vision
+  model passes are scored into the same verdict.
+- Control Center: QA panel per content (verdict + score + summary + 11-point
+  checklist grid with ✓/✕/—, top rejection issues with category/location).
+- E2E proven (fresh DB, stub channels): full brain-first pipeline -> QA
+  `approved` (1.0) over a real assembled video; both plan-consistency and
+  deterministic media checks green.
 
 ## Phase 9 — Publisher
 - Publisher Agent: title, description, hashtags, metadata, thumbnail;

@@ -256,6 +256,44 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
 
 ---
 
+## D-16 — QA vision = fifth gateway channel (Anthropic-style /v1/messages image blocks); honest stub default
+
+- **Decision**: Visual/coherence/appropriateness QA runs through a new vision
+  gateway channel (`POST /v1/messages`, `content:[{type:'image',
+  source:{type:'base64', ...}}]` — Anthropic message format, the shape the
+  upstream router accepts for image input, model `auto/vision`), reading the
+  real still-images from the content asset dir. **Defaults to `OMNIROUTE_QA_STUB`
+  = on**: with the stub, the QA Agent runs only deterministic checks (duration,
+  resolution, vertical 9:16, audio presence, subtitles, clip files, timeline
+  continuity, plan-internal structure/coherence/metadata) and the verdict is
+  marked technical-only. With `OMNIROUTE_QA_STUB=0` the same agent adds a live
+  plan review (`quality.review`) and a live vision review of the stills, gated
+  on the gateway being up.
+- **Alternatives**: forcing vision QA through the text-only channels (cannot see
+  the pixels — the whole point), or always-live (the gateway is currently down,
+  see Status — the phase would be unhittable).
+- **Reason**: identical honesty to D-15/D-13 — pipeline wiring, file reads,
+  verdict persistence, and the UI checklist must stay E2E-verifiable without a
+  live upstream. The stub preserves the exact output contract (issues +
+  checklist), so switching to a live model is purely a config flip.
+- **Trade-offs**: a second message-shaped channel + `auto/vision` model tier;
+  stub mode leaves the model-only checklist rows (`visuals_clean`, `coherence_ok`,
+  `appropriateness_ok`) and the plan/vision review scope marked as unchecked
+  (`null`), which the UI renders as "—". QaIssue gains `location`,
+  `suggestedFix`, `autoFixable` so a rejected verdict can feed future revise
+  loops (Phase 9/10).
+- **Status**: IMPLEMENTED (Phase 8, `AICF-009`) — `gateway/vision.ts`,
+  `agents/qa.ts` (stub + live wiring), Orchestrator feeds `video`/`assets`/
+  `voice`/plan. Pipeline E2E-verified with the stub over a real assembled video
+  (`approved`, score 1.0). **Live vision UNPROVEN (2026-09-01):** OmniRoute
+  :20128 is DOWN (TCP probe failed, `ECONNREFUSED`; the model catalog with
+  `capabilities.vision` models such as `claude-opus-4-8-xhigh` was captured
+  before the outage). The live path fails the job cleanly (retryable) instead
+  of hanging; it stays gated behind `OMNIROUTE_QA_STUB=0`.
+- **Reversibility**: high.
+
+---
+
 ## Environment findings feeding decisions
 
 - Running: **OmniRoute** at `http://127.0.0.1:20128` — task combos + 400+ models

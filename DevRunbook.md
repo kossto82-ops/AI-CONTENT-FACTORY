@@ -61,7 +61,7 @@ npm run build        # vite build -> dist/
 
 ```bash
 cd backend
-npm test             # vitest run — 6 files, 39 tests (baseline after Phase 7)
+npm test             # vitest run — 7 files, 56 tests (baseline after Phase 8)
 npm test             # (run via `npm.cmd` on Windows PowerShell)
 ```
 
@@ -125,6 +125,7 @@ npm run dev
 |------|---------|--------|
 | `OMNIROUTE_TTS_STUB=1` | live | Use deterministic local WAV instead of live TTS. **REQUIRED for E2E**: the NVIDIA TTS NIM (`nvidia/fastpitch`) upstream is DOWN. |
 | `OMNIROUTE_VIDEO_STUB=1` | stub | Use deterministic animated-GIF clips. **Live veo/seedance is UNPROVEN** (all 4 models time out; see Troubleshooting). Set `=0` to try live. |
+| `OMNIROUTE_QA_STUB=1` | stub | QA Agent runs deterministic checks only (technical + plan-consistency); model/vision rows show as un-checked (`null`). **Live vision UNPROVEN** — OmniRoute :20128 down; set `=0` to try live plan review + vision review. |
 | `OMNIROUTE_URL` | `http://127.0.0.1:20128` | Gateway base. |
 | `FACTORY_DB` | `./data/factory.db` | SQLite path (e.g. `./data/fase7-test.db` for a fresh E2E DB). |
 
@@ -140,6 +141,7 @@ above. Reset the port first if a previous dev server still listens on :8787.
 | Dashboard shows "API offline" | Backend not running; start `npm run dev` in `backend/`. CORS is open (`*`). |
 | Voice job `OmniRoute audio error: 404` | TTS NIM down → set `OMNIROUTE_TTS_STUB=1`. |
 | Video/assembly clips are gray GIF bands | Stub mode (expected placeholder). Live modes time out — `veo-free/veo` >240s, other 3 models >150s each (2026-09-01). The live path fails cleanly after 120s, retryable. |
+| QA verdict shows `—` on Visual/Coherence/Appropriate rows | `OMNIROUTE_QA_STUB=1` (default): model-driven checks are skipped and left un-checked (`null`) — expected; deterministic rows are green. Set `=0` for live model review. |
 | Tests hit stale pipeline steps | Tests use in-memory DB (fixed); check `backend/data/*.db` for stale `pipeline_brain` — reconciled on load (missing steps auto-injected). |
 | Port 8787 busy after a crash | `Get-NetTCPConnection -LocalPort 8787 -State Listen` → kill owning PID. |
 | DB lock / WAL files linger | SQLite WAL — stop the server before deleting `*.db*` files. |
