@@ -1221,12 +1221,14 @@ function FinalVideoPreview({ content, video }: { content: Content; video: Assemb
         {current.narration}
       </div>
 
-      {isVideo && (
-        <audio key={current.sceneId} controls autoPlay={playing} className="mt-1 h-8 w-full" src={voiceUrl} />
-      )}
-      {isAnimated && (
-        <div className="mt-1 h-8" title="Voice plays while the animated clip paces the scene" />
-      )}
+      <audio
+        key={current.sceneId}
+        controls
+        autoPlay={playing}
+        className="mt-1 h-8 w-full"
+        src={voiceUrl}
+        onEnded={() => setPlaying(false)}
+      />
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1">
