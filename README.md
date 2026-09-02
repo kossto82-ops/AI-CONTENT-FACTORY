@@ -1,3 +1,5 @@
+> A solo, AI-directed project exploring multi-agent orchestration for short-form video production. Built to be honest about what works: creative planning and approval flows are fully functional; live neural TTS and video generation are documented as unproven and run against local stubs until the upstream services are reachable.
+
 # AI Content Factory
 
 Controlled, multi-agent platform for producing short-form vertical video
