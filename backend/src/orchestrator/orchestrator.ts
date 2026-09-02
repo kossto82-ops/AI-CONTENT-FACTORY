@@ -623,6 +623,10 @@ function stageFor(agent: AgentType): import('../domain/types.js').ContentStatus 
     // content has been analysed by the system.
     case 'analytics':
       return 'ANALYZED';
+    // Learning is also a global cross-content aggregation (Decision D-19);
+    // the terminal ANALYZED state keeps the enum closed.
+    case 'learning':
+      return 'ANALYZED';
   }
 }
 
@@ -648,6 +652,9 @@ function defaultArtifactKind(agent: AgentType): string | undefined {
     // No per-content artifact for the global Analytics Agent.
     case 'analytics':
       return undefined;
+    // No per-content artifact for the global Learning Agent.
+    case 'learning':
+      return undefined;
   }
 }
 
@@ -672,6 +679,9 @@ function defaultApprovalKind(agent: AgentType): string {
       return 'publication';
     // Analytics is never a gated pipeline step; this path is unreachable.
     case 'analytics':
+      return 'publication';
+    // Learning is never a gated pipeline step; this path is unreachable.
+    case 'learning':
       return 'publication';
   }
 }

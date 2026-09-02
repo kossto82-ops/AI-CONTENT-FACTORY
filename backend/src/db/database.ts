@@ -155,6 +155,20 @@ CREATE TABLE IF NOT EXISTS model_registry (
 );
 `,
   },
+  {
+    version: 3,
+    up: `
+CREATE TABLE IF NOT EXISTS learning (
+  id            TEXT PRIMARY KEY,
+  kind          TEXT NOT NULL,   -- lesson|idea|recommendation
+  source_content_id TEXT,        -- for ideas: the origin content
+  title         TEXT,
+  body          TEXT NOT NULL DEFAULT '',
+  payload       TEXT NOT NULL DEFAULT '{}',  -- JSON (Idea for ideas, stats for lessons)
+  created_at    TEXT NOT NULL
+);
+`,
+  },
 ];
 
 export function migrate(db: DB): void {

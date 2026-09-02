@@ -101,6 +101,40 @@ export interface PublishPackage {
   version: number;
 }
 
+export interface LearningResult {
+  generatedAt: string;
+  lessons: {
+    id: string;
+    kind: 'cost' | 'qa' | 'throughput' | 'publish' | 'pattern';
+    severity: 'high' | 'medium' | 'low';
+    title: string;
+    body: string;
+  }[];
+  ideas: {
+    id: string;
+    sourceContentId: string;
+    sourceTitle: string;
+    sourceQaScore: number;
+    variation: string;
+    idea: {
+      title: string;
+      concept: string;
+      target_age: string;
+      format: string;
+      hook: string;
+      reason: string;
+      score: number;
+    };
+  }[];
+  recommendations: {
+    id: string;
+    action: string;
+    reason: string;
+    priority: 'high' | 'medium' | 'low';
+    target: string;
+  }[];
+}
+
 export interface AnalyticsResult {
   generatedAt: string;
   totals: { costEur: number; tokensIn: number; tokensOut: number; jobs: number };
@@ -226,6 +260,7 @@ export const api = {
   dashboard: () => req<Dashboard>('/api/dashboard'),
   agents: () => req<{ agents: Agent[] }>('/api/agents'),
   analytics: () => req<AnalyticsResult>('/api/analytics'),
+  learning: () => req<LearningResult>('/api/learning'),
   content: () => req<{ content: Content[] }>('/api/content'),
   contentDetail: (id: string) =>
     req<{

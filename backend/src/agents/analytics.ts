@@ -25,6 +25,8 @@ export interface AnalyticsAgentRow {
 }
 
 export interface AnalyticsQaVerdict {
+  /** Source content (null for aggregated/global inputs). */
+  content_id?: string | null;
   status: 'approved' | 'rejected';
   score: number;
   issues: { severity: 'low' | 'medium' | 'high' | string; category: string }[];

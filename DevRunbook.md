@@ -61,7 +61,7 @@ npm run build        # vite build -> dist/
 
 ```bash
 cd backend
-npm test             # vitest run — 9 files, 78 tests (after Phase 10)
+npm test             # vitest run — 10 files, 85 tests (after Phase 11)
 npm test             # (run via `npm.cmd` on Windows PowerShell)
 ```
 
@@ -132,6 +132,7 @@ npm run dev
 | `OMNIROUTE_QA_STUB=1` | stub | QA Agent runs deterministic checks only (technical + plan-consistency); model/vision rows show as un-checked (`null`). **Live vision UNPROVEN** — OmniRoute :20128 down; set `=0` to try live plan review + vision review. |
 | _(Publisher)_ | determinist | Phase 9 Publisher needs **no gateway and no flag** — it derives a `publish_package` (metadata) locally. Publication is logical (`LocalExport`), no upload. Scheduling = a `scheduledAt` field, no runner. |
 | _(Analytics)_ | determinist | Phase 10 Analytics needs **no gateway and no flag** — `GET /api/analytics` aggregates internal KPIs deterministically (`computeAnalytics`, pure function). Not a pipeline step. |
+| _(Learning)_ | determinist | Phase 11 Learning needs **no gateway and no flag** — `GET /api/learning` derives lessons/ideas/recommendations deterministically (`computeLearning`, pure; D-19). Not a pipeline step; embeddings upgrade deferred. |
 | `OMNIROUTE_URL` | `http://127.0.0.1:20128` | Gateway base. |
 | `FACTORY_DB` | `./data/factory.db` | SQLite path (e.g. `./data/fase7-test.db` for a fresh E2E DB). |
 

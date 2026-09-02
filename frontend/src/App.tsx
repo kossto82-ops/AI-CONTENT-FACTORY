@@ -12,10 +12,11 @@ import {
   type QaChecklist,
   type PublishPackage,
   type AnalyticsResult,
+  type LearningResult,
 } from './api';
 import { Badge, Btn, Card, SectionTitle, Stat, toneForStatus } from './ui';
 
-type Tab = 'dashboard' | 'analytics' | 'agents' | 'content' | 'approvals' | 'pipeline';
+type Tab = 'dashboard' | 'analytics' | 'learning' | 'agents' | 'content' | 'approvals' | 'pipeline';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -26,19 +27,21 @@ export function App() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsResult | null>(null);
+  const [learning, setLearning] = useState<LearningResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [d, a, c, ap, p, an] = await Promise.all([
+      const [d, a, c, ap, p, an, ln] = await Promise.all([
         api.dashboard(),
         api.agents(),
         api.content(),
         api.approvals(),
         api.pipelines(),
         api.analytics(),
+        api.learning(),
       ]);
       setDash(d);
       setAgents(a.agents);
@@ -46,6 +49,7 @@ export function App() {
       setApprovals(ap.approvals);
       setPipeline(p.active);
       setAnalytics(an);
+      setLearning(ln);
       setApiOk(true);
       setError(null);
     } catch (e) {
@@ -105,6 +109,7 @@ export function App() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'analytics', label: 'Analytics' },
+    { id: 'learning', label: 'Learning' },
     { id: 'pipeline', label: 'Pipeline' },
     { id: 'agents', label: 'Agents' },
     { id: 'content', label: 'Content' },
@@ -151,6 +156,7 @@ export function App() {
         )}
         {tab === 'agents' && <AgentsView agents={agents} />}
         {tab === 'analytics' && <AnalyticsView analytics={analytics} />}
+        {tab === 'learning' && <LearningView learning={learning} />}
         {tab === 'pipeline' && (
           <PipelineView pipeline={pipeline} onSaveStep={saveStep} busy={busy} />
         )}
@@ -445,6 +451,88 @@ function AnalyticsView({ analytics }: { analytics: AnalyticsResult | null }) {
                   ))}
                 </div>
               )}
+            </Card>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LearningView({ learning }: { learning: LearningResult | null }) {
+  const l = learning;
+  const toneForSeverity = (s: string) =>
+    s === 'high' ? 'text-red-400' : s === 'medium' ? 'text-amber-300' : 'text-emerald-300';
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <SectionTitle>Learning</SectionTitle>
+        {l && (
+          <span className="font-mono text-[10px] text-slate-600 uppercase tracking-widest">
+            generated {l.generatedAt}
+          </span>
+        )}
+      </div>
+
+      {!l ? (
+        <p className="text-sm text-slate-500">No learning yet — run content through the pipeline first.</p>
+      ) : (
+        <>
+          {l.recommendations.length > 0 && (
+            <Card className="p-4">
+              <SectionTitle>Recommendations</SectionTitle>
+              <div className="mt-2 space-y-2">
+                {l.recommendations.map((r) => (
+                  <div key={r.id} className="flex items-start gap-3 border-b border-ink-700/50 py-1.5">
+                    <span className={`mt-0.5 shrink-0 rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${toneForSeverity(r.priority)}`}>
+                      {r.priority}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-slate-100">{r.action}</div>
+                      <div className="text-xs text-slate-500">{r.reason}</div>
+                    </div>
+                    <span className="ml-auto shrink-0 font-mono text-[10px] text-slate-600">{r.target}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="p-4">
+              <SectionTitle>Lessons</SectionTitle>
+              <div className="mt-2 space-y-1">
+                {l.lessons.length === 0 && <p className="text-sm text-slate-500">No lessons yet.</p>}
+                {l.lessons.map((ls) => (
+                  <div key={ls.id} className="border-b border-ink-700/50 py-1.5">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className={`font-semibold ${toneForSeverity(ls.severity)}`}>{ls.title}</span>
+                      <span className="font-mono text-[10px] uppercase tracking-widest text-slate-600">{ls.kind}</span>
+                    </div>
+                    <p className="text-xs text-slate-500">{ls.body}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <SectionTitle>Ideas</SectionTitle>
+              <div className="mt-2 space-y-1">
+                {l.ideas.length === 0 && <p className="text-sm text-slate-500">No ideas yet — QA-approve a plan first.</p>}
+                {l.ideas.map((ld) => (
+                  <div key={ld.id} className="border-b border-ink-700/50 py-1.5">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-medium text-slate-200">{ld.idea.title}</span>
+                      <span className="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-[10px] text-sky-400">
+                        {ld.variation}
+                      </span>
+                      <span className="ml-auto font-mono text-[10px] text-slate-600">QA {ld.sourceQaScore.toFixed(2)}</span>
+                    </div>
+                    <p className="mt-0.5 text-xs italic text-slate-400">{ld.idea.hook}</p>
+                    <p className="text-xs text-slate-500">{ld.idea.reason}</p>
+                  </div>
+                ))}
+              </div>
             </Card>
           </div>
         </>

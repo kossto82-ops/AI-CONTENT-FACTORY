@@ -177,6 +177,30 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
   qa/publish artifacts across 2 contents → `/api/analytics` returned correct
   totals (€0.15, 50% approve, avgScore 0.94, 1 published, 255s avg pipeline).
 
-## Phase 11 — Learning
-- Learning Agent: learn from results -> generate new ideas.
-- Semantic memory via embeddings (bge-m3 / mistral-embed).
+## Phase 11 — Learning (DONE, `AICF-012`; deterministic v1, no gateway)
+
+Decision D-19: v1 is **deterministic** (no LLM/embeddings) — the embedding models
+are available upstream but a semantic-memory client does not exist yet, and a
+callable offline learner was the stepping stone. The Learning Agent consumes
+exactly the **internal** signals Analytics already proves (D-18); it is a
+cross-content aggregation like analytics, **not** a pipeline step and **not** a
+per-content artifact (`stageFor` → `ANALYZED`, mode `AUTOMATIC`).
+- `computeLearning(input)` (pure, in `backend/src/agents/learning.ts`) reuses
+  `computeAnalytics` for the KPI signal and derives three deterministic outputs:
+  1. **Lessons** — patterns: agent concentrating cost (share), average cost per
+     content, QA approve-rate and top failing issue category, mean pipeline
+     duration, publish rate. Each has an id, kind, severity and a human body.
+  2. **Ideas** — up to 4 deterministic variations (`hook`/`shorter`/`continuation`/
+     `remix`) derived from `production_plan` artifacts of QA-approved content,
+     validated against the same `ideaSchema` the research agent uses and ordered
+     by QA eligibility (score ≥ 0.7 first).
+  3. **Recommendations** — actionable strategy: re-route tier when an agent
+     concentrates ≥ 40% of cost, fix the top QA issue category, parallelize the
+     pipeline when mean duration is high, re-check approval gates when nothing
+     publishes.
+- Migration v3 adds a `learning` table; `GET /api/learning` computes the set and
+  persists it atomically (replace): lessons/ideas/recommendations.
+- Control Center: new **Learning** tab (recommendations, lessons, derived idea
+  cards with score + source content).
+- 7 hermetic unit tests; full suite green (10 files, 85 tests). E2E proven via
+  real HTTP server on a fresh DB + restart of the dev backend.

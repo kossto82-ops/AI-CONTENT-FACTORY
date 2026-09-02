@@ -56,6 +56,7 @@ export function defaultAgentMode(agent: AgentType): AgentMode {
     case 'assembly':
     case 'publisher':
     case 'analytics':
+    case 'learning':
       return 'AUTOMATIC';
     default:
       return 'SEMI_AUTOMATIC';

@@ -358,6 +358,36 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
 
 ---
 
+## D-19 — Learning v1 = deterministic (no LLM/embeddings; internal signals only)
+
+- **Decision**: the Phase 11 Learning Agent starts as a **pure, deterministic
+  function** (`computeLearning(input)` in `backend/src/agents/learning.ts`) that
+  reuses `computeAnalytics` for the KPI signal and derives three outputs:
+  **lessons** (patterns over cost/QA/throughput/publish), **ideas** (up to 4
+  deterministic variations of QA-approved `production_plan` artifacts,
+  validated against the pipeline's `ideaSchema`), and **recommendations**
+  (tier re-routing, QA-category fixes, pipeline parallelization, gate checks).
+  The server owns the SQL reads; `GET /api/learning` persists the set
+  atomically in a `learning` table (replace semantics).
+- **Context**: OmniRoute exposes embedding models (bge-m3 / mistral-embed /
+  nv-embedqa), but the backend has **no embedding client yet**, and a
+  semantic-memory layer was the risky part of the phase. A callable offline
+  learner that only trusts the internal record (D-17/D-18) is the honest first
+  step — no invented "performance insight", fully hermetic-testable.
+- **Alternatives**: (a) embedding-based semantic memory now — rejected: no
+  client exists, adds a live dependency and non-determinism before the mechanics
+  are proven; (b) LLM-written lessons — rejected per D-18 reasoning (invented
+  signal). Embeddings stay the documented upgrade path (`D-19a` if adopted).
+- **Shape consequences**: like Analytics, Learning is **not** a pipeline step —
+  `stageFor` → `ANALYZED`, `defaultArtifactKind` → `undefined`,
+  `defaultApprovalKind` → `publication` (unreachable), registry mode AUTOMATIC.
+  It is served live and has no job/artifact/approval per content.
+- **Status**: IMPLEMENTED (Phase 11, `AICF-012`). 7 hermetic unit tests;
+  suite green (10 files, 85 tests). E2E via real HTTP server on a fresh DB.
+- **Reversibility**: high.
+
+---
+
 ## Environment findings feeding decisions
 
 - Running: **OmniRoute** at `http://127.0.0.1:20128` — task combos + 400+ models

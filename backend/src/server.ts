@@ -8,6 +8,8 @@ import { contentRepo, jobRepo, approvalRepo, artifactRepo } from './db/repositor
 import { Orchestrator } from './orchestrator/orchestrator.js';
 import { allRunners } from './agents/registry.js';
 import { computeAnalytics, type AnalyticsInput } from './agents/analytics.js';
+import { computeLearning, type LearningInput } from './agents/learning.js';
+import { newId, nowIso } from './domain/types.js';
 import type { AgentMode } from './domain/types.js';
 import {
   listPipelines,
@@ -206,6 +208,109 @@ const routes: Route[] = [
         .map((p) => ({ status: p.status as 'SCHEDULED' | 'PUBLISHED', target: p.target ?? 'LocalExport' }));
       const input: AnalyticsInput = { jobs, qaVerdicts, publishPackages, contents };
       sendJson(res, 200, computeAnalytics(input));
+    },
+  },
+  {
+    method: 'GET',
+    match: /^\/api\/learning$/,
+    handler(_m, _req, res) {
+      const jobs = (getDB().prepare('SELECT * FROM job').all() as any[]).map((j) => ({
+        content_id: j.content_id,
+        type: j.type,
+        status: j.status,
+        cost_eur: j.cost_eur || 0,
+        tokens_in: j.tokens_in || 0,
+        tokens_out: j.tokens_out || 0,
+        created_at: j.created_at,
+        completed_at: j.completed_at,
+      }));
+      const contents = contentRepo.list().map((c) => ({
+        id: c.id,
+        status: c.status,
+        created_at: c.created_at,
+      }));
+      const artifactRows = getDB()
+        .prepare("SELECT content_id, kind, version, payload FROM artifact WHERE kind IN ('qa','publish_package','production_plan')")
+        .all() as { content_id: string; kind: string; version: number; payload: string }[];
+      const qaVerdicts = artifactRows
+        .filter((a) => a.kind === 'qa')
+        .map((a) => {
+          const v = safeParse(a.payload) as { content_id?: string; status?: string; score?: number; issues?: { severity: string; category: string }[] };
+          return {
+            content_id: a.content_id,
+            status: v.status as 'approved' | 'rejected',
+            score: v.score ?? 0,
+            issues: (v.issues ?? []).map((i) => ({ severity: i.severity, category: i.category })),
+          };
+        })
+        .filter((v) => v.status);
+      const publishPackages = artifactRows
+        .filter((a) => a.kind === 'publish_package')
+        .map((a) => safeParse(a.payload) as { status?: string; target?: string })
+        .filter((p) => p.status)
+        .map((p) => ({ status: p.status as 'SCHEDULED' | 'PUBLISHED', target: p.target ?? 'LocalExport' }));
+
+      // Source plans with provenance: any content that has a production plan,
+      // enriched with its best QA score, format/target-age and total cost.
+      const bestQa = new Map<string, number>();
+      for (const v of qaVerdicts) {
+        const cid = v.content_id ?? '';
+        if (!cid) continue;
+        bestQa.set(cid, Math.max(bestQa.get(cid) ?? 0, v.score ?? 0));
+      }
+      const costByContent = new Map<string, number>();
+      for (const j of jobs) {
+        if (!j.content_id) continue;
+        costByContent.set(j.content_id, (costByContent.get(j.content_id) ?? 0) + (j.cost_eur || 0));
+      }
+      const contentById = new Map(contentRepo.list().map((c) => [c.id, c]));
+      const plans = artifactRows
+        .filter((a) => a.kind === 'production_plan')
+        .map((a) => {
+          const plan = safeParse(a.payload) as Parameters<typeof computeLearning>[0]['plans'][number]['plan'] | null;
+          const c = contentById.get(a.content_id);
+          if (!plan || !c) return null;
+          return {
+            contentId: a.content_id,
+            plan,
+            qaScore: bestQa.get(a.content_id) ?? 0,
+            format: c.format,
+            targetAge: c.target_age,
+            totalCostEur: costByContent.get(a.content_id) ?? 0,
+          };
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null);
+
+      const input: LearningInput = { jobs, qaVerdicts, publishPackages, contents, plans };
+      const result = computeLearning(input);
+
+      // Persist the learning set (lessons/ideas/recommendations) atomically:
+      // replace the previous run so the table always mirrors the latest result.
+      const db = getDB();
+      db.exec('BEGIN');
+      try {
+        db.prepare("DELETE FROM learning WHERE kind IN ('lesson','idea','recommendation')").run();
+        const ins = db.prepare(
+          'INSERT INTO learning (id, kind, source_content_id, title, body, payload, created_at) VALUES (?,?,?,?,?,?,?)',
+        );
+        for (const l of result.lessons) {
+          ins.run(newId('learn'), 'lesson', null, l.title, l.body, JSON.stringify(l), result.generatedAt);
+        }
+        for (const id of result.ideas) {
+          ins.run(
+            newId('learn'), 'idea', id.sourceContentId, id.idea.title,
+            id.idea.reason, JSON.stringify(id), result.generatedAt,
+          );
+        }
+        for (const r of result.recommendations) {
+          ins.run(newId('learn'), 'recommendation', null, r.action, r.reason, JSON.stringify(r), result.generatedAt);
+        }
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+      sendJson(res, 200, result);
     },
   },
   {
@@ -489,6 +594,7 @@ function agentDefaultMode(type: string): AgentMode {
     case 'assembly':
     case 'publisher':
     case 'analytics':
+    case 'learning':
       return 'AUTOMATIC';
     default:
       return 'SEMI_AUTOMATIC';
