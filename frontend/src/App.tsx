@@ -98,7 +98,7 @@ export function App() {
   );
 
   const revisePlan = useCallback(
-    (contentId: string) => wrap(api.revisePlan(contentId), 'Revision started â€” new plan queued'),
+    (contentId: string) => wrap(api.revisePlan(contentId), 'Revision started — new plan queued'),
     [wrap],
   );
 
@@ -197,7 +197,7 @@ function Header({
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="glow flex h-9 w-9 items-center justify-center rounded-lg bg-accent-500/10 text-accent-400">
-            <span className="text-lg font-black">â—‰</span>
+            <span className="text-lg font-black">◉</span>
           </div>
           <div>
             <div className="text-base font-semibold text-slate-100">AI Content Factory</div>
@@ -215,10 +215,10 @@ function Header({
                 apiOk === false ? 'bg-red-500' : apiOk ? 'bg-emerald-500' : 'bg-slate-500'
               }`}
             />
-            {apiOk === false ? 'API offline' : apiOk ? 'API online' : 'connectingâ€¦'}
+            {apiOk === false ? 'API offline' : apiOk ? 'API online' : 'connecting…'}
           </span>
           <Btn onClick={onRefresh} disabled={busy}>
-            âŸ³ Refresh
+            ⟳ Refresh
           </Btn>
         </div>
       </div>
@@ -298,7 +298,7 @@ function DashboardView({
                       disabled={busy}
                       className="rounded-md border border-ink-700 px-2 py-0.5 text-[11px] font-medium text-slate-300 transition hover:bg-ink-700 disabled:opacity-40"
                     >
-                      â–¶ Run
+                      ▶ Run
                     </button>
                   )}
                 </span>
@@ -320,11 +320,11 @@ function PipelineFlow({ pendingApprovals }: { pendingApprovals: number }) {
           <div className="rounded-lg border border-ink-700 bg-ink-850 px-3 py-1.5 text-sm text-slate-200">
             {s}
           </div>
-          {i < steps.length - 1 && <span className="text-slate-600">â†’</span>}
+          {i < steps.length - 1 && <span className="text-slate-600">→</span>}
         </div>
       ))}
       <span className="ml-3 text-xs text-slate-500">
-        {pendingApprovals > 0 ? 'â¸ waiting for human approval' : 'Â· QA auto-runs Â· publish disabled (MVP)'}
+        {pendingApprovals > 0 ? '⏸ waiting for human approval' : '· QA auto-runs · publish disabled (MVP)'}
       </span>
     </div>
   );
@@ -464,14 +464,14 @@ function AgentsView({ agents }: { agents: Agent[] }) {
               <div>
                 <div className="font-semibold text-slate-100">{a.name}</div>
                 <div className="text-[11px] uppercase tracking-widest text-slate-500">
-                  mode Â· {a.mode}
+                  mode · {a.mode}
                 </div>
               </div>
               <Badge tone={toneForStatus(a.status)}>{a.status}</Badge>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <div className="text-slate-500">
-                Cost <span className="text-slate-200">â‚¬{a.totalCost.toFixed(4)}</span>
+                Cost <span className="text-slate-200">€{a.totalCost.toFixed(4)}</span>
               </div>
               <div className="text-slate-500">
                 Tokens <span className="text-slate-200">{a.totalTokens.toLocaleString()}</span>
@@ -480,7 +480,7 @@ function AgentsView({ agents }: { agents: Agent[] }) {
             {a.lastJob && (
               <div className="mt-2 border-t border-ink-700/50 pt-2 text-xs text-slate-500">
                 last job: <span className="font-mono text-slate-400">{a.lastJob.id.slice(0, 10)}</span>{' '}
-                Â· {a.lastJob.status}
+                · {a.lastJob.status}
               </div>
             )}
           </Card>
@@ -505,7 +505,7 @@ function PipelineView({
   return (
     <div className="space-y-4">
       <div>
-        <SectionTitle>Pipeline â€” {pipeline.name}</SectionTitle>
+        <SectionTitle>Pipeline — {pipeline.name}</SectionTitle>
         <p className="mt-1 text-xs text-slate-500">
           Per-step execution mode (AUTO / SEMI / MANUAL) and approval gates. Changes persist and
           apply to the next started pipeline.
@@ -536,7 +536,7 @@ function StepCard({
         <div>
           <div className="font-semibold capitalize text-slate-100">{step.agent}</div>
           <div className="text-[11px] uppercase tracking-widest text-slate-500">
-            gate Â· {step.approvalKind ?? 'â€”'}
+            gate · {step.approvalKind ?? '—'}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -695,8 +695,8 @@ function ContentCard({
         <div className="min-w-0">
           <div className="font-semibold text-slate-100">{c.title ?? '(untitled idea)'}</div>
           <div className="font-mono text-[11px] text-slate-500">
-            {c.id} Â· {c.format ?? 'â€”'} Â· {c.targetAge ?? 'â€”'}
-            {c.planVersion ? ` Â· plan v${c.planVersion}` : ''}
+            {c.id} · {c.format ?? '—'} · {c.targetAge ?? '—'}
+            {c.planVersion ? ` · plan v${c.planVersion}` : ''}
           </div>
 {qa && (
             <div className="mt-2 max-w-xl space-y-1">
@@ -737,7 +737,7 @@ function ContentCard({
                 <div key={s.sceneId} className="flex items-center gap-2">
                   <span className="w-24 shrink-0 truncate font-mono text-[11px] text-slate-500">
                     {s.sceneId}
-                    {s.durationSeconds ? ` Â· ${s.durationSeconds}s` : ''}
+                    {s.durationSeconds ? ` · ${s.durationSeconds}s` : ''}
                   </span>
                   <audio
                     controls
@@ -758,7 +758,7 @@ function ContentCard({
           <Badge tone={toneForStatus(c.status)}>{c.status}</Badge>
           {c.revisable && (
             <Btn kind="danger" onClick={() => onRevisePlan(c.id)} disabled={busy} title="Re-run Director to revise the plan after QA rejection">
-              â†» Revise plan
+              ↻ Revise plan
             </Btn>
           )}
           <Btn kind="primary" onClick={() => onStartPipeline(c.id)} disabled={busy}>
@@ -800,7 +800,7 @@ function FinalVideoPreview({ content, video }: { content: Content; video: Assemb
     <div className="mt-3 w-full max-w-md rounded-xl border border-ink-700/60 bg-ink-850 p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[11px] font-semibold uppercase tracking-widest text-accent-400">
-          Final video Â· {video.videoId}
+          Final video · {video.videoId}
         </span>
         <div className="flex gap-2 text-[11px] text-slate-500">
           <a className="underline hover:text-slate-300" href={subtitleUrl} target="_blank" rel="noreferrer">
@@ -827,7 +827,7 @@ function FinalVideoPreview({ content, video }: { content: Content; video: Assemb
             <img src={`/api/assets/${content.id}/${current.visualFile}`} alt={current.sceneId} className="h-full w-full object-cover" />
           )}
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1 pt-6 text-[11px] text-slate-200">
-            {current.sceneId} Â· {current.startSec.toFixed(1)}sâ€“{current.endSec.toFixed(1)}s
+            {current.sceneId} · {current.startSec.toFixed(1)}s–{current.endSec.toFixed(1)}s
           </div>
         </div>
       </div>
@@ -859,25 +859,25 @@ function FinalVideoPreview({ content, video }: { content: Content; video: Assemb
         </div>
         <div className="flex gap-1.5">
           <Btn onClick={() => { setPlaying(false); setIdx(Math.max(0, idx - 1)); }}>
-            â€¹ Prev
+            ‹ Prev
           </Btn>
           <Btn kind={playing ? 'default' : 'primary'} onClick={() => setPlaying(!playing)}>
-            {playing ? 'âšâš Pause' : 'â–¶ Play'}
+            {playing ? '❚❚ Pause' : '▶ Play'}
           </Btn>
           <Btn onClick={() => { setPlaying(false); setIdx(Math.min(scenes.length - 1, idx + 1)); }}>
-            Next â€º
+            Next ›
           </Btn>
         </div>
       </div>
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-ink-700/50 pt-2 text-[11px] text-slate-500">
         <span>
-          {video.resolution} Â· {video.aspectRatio} Â· {video.fps}fps
+          {video.resolution} · {video.aspectRatio} · {video.fps}fps
         </span>
         <span>
-          {video.durationSec}s Â· {video.scenes.length} scenes
+          {video.durationSec}s · {video.scenes.length} scenes
         </span>
-        <span className="capitalize">model: {video.model.replace(/^stub-/, 'stub Â· ')}</span>
+        <span className="capitalize">model: {video.model.replace(/^stub-/, 'stub · ')}</span>
         <span>provider: {video.provider}</span>
       </div>
     </div>
@@ -926,15 +926,15 @@ function ApprovalCard({
             <Badge tone="WAITING_APPROVAL">AWAITING REVIEW</Badge>
           </div>
           <div className="font-mono text-[11px] text-slate-500">
-            {a.id} Â· content {a.contentId}
+            {a.id} · content {a.contentId}
           </div>
         </div>
         <div className="flex gap-2">
           <Btn kind="success" onClick={() => onDecide(a.id, 'APPROVED', 'approved in control center')} disabled={busy}>
-            âœ“ Approve
+            ✔ Approve
           </Btn>
           <Btn kind="danger" onClick={() => onDecide(a.id, 'REJECTED')} disabled={busy}>
-            âœ— Reject
+            ✖ Reject
           </Btn>
         </div>
       </div>
