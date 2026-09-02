@@ -73,6 +73,19 @@ describe('job state machine', () => {
     transitionJob(j, 'COMPLETED');
     expect(j.completed_at).toBeTruthy();
   });
+
+  it('rejects FAILED -> RUNNING directly', () => {
+    const j = makeJob('FAILED');
+    expect(() => transitionJob(j, 'RUNNING')).toThrow(InvalidTransitionError);
+  });
+
+  it('allows retrying a FAILED job via READY first', () => {
+    const j = makeJob('FAILED');
+    transitionJob(j, 'READY');
+    transitionJob(j, 'RUNNING');
+    expect(j.status).toBe('RUNNING');
+    expect(j.started_at).toBeTruthy();
+  });
 });
 
 describe('crash recovery (recoverInterrupted)', () => {

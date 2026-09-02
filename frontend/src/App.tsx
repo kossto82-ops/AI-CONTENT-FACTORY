@@ -119,6 +119,18 @@ export function App() {
     [wrap],
   );
 
+  const deleteContent = useCallback(
+    (contentId: string) => {
+      const c = content.find((x) => x.id === contentId);
+      const name = c?.title ?? contentId;
+      if (!window.confirm(`Delete "${name}" permanently?\n\nThis removes its jobs, approvals, artifacts and generated files. This cannot be undone.`)) {
+        return;
+      }
+      wrap(api.deleteContent(contentId), 'Content deleted');
+    },
+    [wrap, content],
+  );
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'analytics', label: 'Analytics' },
@@ -190,6 +202,7 @@ export function App() {
             onStartPipeline={(id) => wrap(api.startPipeline(id), 'Pipeline started')}
             onRunJobs={() => wrap(api.runJobs(), 'Jobs drained')}
             onRevisePlan={revisePlan}
+            onDeleteContent={deleteContent}
             busy={busy}
           />
         )}
@@ -354,13 +367,14 @@ function DashboardView({
                 </span>
                 <span className="flex items-center gap-2">
                   <Badge tone={toneForStatus(j.status)}>{j.status}</Badge>
-                  {j.status === 'READY' && (
+                  {(j.status === 'READY' || j.status === 'FAILED') && (
                     <button
                       onClick={() => onRunManualJob(j.id)}
                       disabled={busy}
+                      title={j.status === 'FAILED' ? 'Re-run this failed job' : 'Run this manual/ready job'}
                       className="rounded-md border border-ink-700 px-2 py-0.5 text-[11px] font-medium text-slate-300 transition hover:bg-ink-700 disabled:opacity-40"
                     >
-                      ▶ Run
+                      {j.status === 'FAILED' ? '↻ Retry' : '▶ Run'}
                     </button>
                   )}
                 </span>
@@ -926,6 +940,7 @@ function ContentView({
   onStartPipeline,
   onRunJobs,
   onRevisePlan,
+  onDeleteContent,
   busy,
 }: {
   content: Content[];
@@ -933,6 +948,7 @@ function ContentView({
   onStartPipeline: (id: string) => void;
   onRunJobs: () => void;
   onRevisePlan: (id: string) => void;
+  onDeleteContent: (id: string) => void;
   busy: boolean;
 }) {
   return (
@@ -948,7 +964,7 @@ function ContentView({
       )}
       <div className="space-y-3">
         {content.map((c) => (
-          <ContentCard key={c.id} c={c} channels={channels} onStartPipeline={onStartPipeline} onRevisePlan={onRevisePlan} busy={busy} />
+          <ContentCard key={c.id} c={c} channels={channels} onStartPipeline={onStartPipeline} onRevisePlan={onRevisePlan} onDeleteContent={onDeleteContent} busy={busy} />
         ))}
       </div>
     </div>
@@ -1036,12 +1052,14 @@ function ContentCard({
   channels,
   onStartPipeline,
   onRevisePlan,
+  onDeleteContent,
   busy,
 }: {
   c: Content;
   channels: Channel[];
   onStartPipeline: (id: string) => void;
   onRevisePlan: (id: string) => void;
+  onDeleteContent: (id: string) => void;
   busy: boolean;
 }) {
   const qa = c.latestQa;
@@ -1123,6 +1141,14 @@ function ContentCard({
           <Btn kind="primary" onClick={() => onStartPipeline(c.id)} disabled={busy}>
             Start pipeline
           </Btn>
+          <button
+            onClick={() => onDeleteContent(c.id)}
+            disabled={busy}
+            title="Delete this content permanently"
+            className="rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-medium text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
+          >
+            ✕ Delete
+          </button>
         </div>
       </div>
     </Card>

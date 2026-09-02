@@ -1,9 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { getDB } from './db/database.js';
+import { getDB, type DB } from './db/database.js';
 import { contentRepo, jobRepo, approvalRepo, artifactRepo, channelRepo } from './db/repository.js';
 import { Orchestrator } from './orchestrator/orchestrator.js';
 import { allRunners } from './agents/registry.js';
@@ -45,6 +45,42 @@ function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
     });
     req.on('error', reject);
   });
+}
+
+/**
+ * Delete a content row together with everything that references it, in one
+ * transaction: jobs, executions (by job id), approvals, artifacts, events and
+ * the content row itself. On-disk assets are removed by the caller. Tables
+ * store content_id/job_id as plain columns (no ON DELETE CASCADE), so the
+ * cleanup must be explicit.
+ */
+export function deleteContentDeep(id: string, db: DB): void {
+  const jobIds = (db.prepare('SELECT id FROM job WHERE content_id = ?').all(id) as { id: string }[]).map(
+    (r) => r.id,
+  );
+  const approvalIds = (
+    db.prepare('SELECT id FROM approval WHERE content_id = ?').all(id) as { id: string }[]
+  ).map((r) => r.id);
+
+  db.exec('BEGIN');
+  try {
+    for (const jid of jobIds) {
+      db.prepare('DELETE FROM execution WHERE job_id = ?').run(jid);
+      db.prepare("DELETE FROM event WHERE entity_type='job' AND entity_id=?").run(jid);
+    }
+    for (const aid of approvalIds) {
+      db.prepare("DELETE FROM event WHERE entity_type='approval' AND entity_id=?").run(aid);
+    }
+    db.prepare('DELETE FROM job WHERE content_id = ?').run(id);
+    db.prepare('DELETE FROM approval WHERE content_id = ?').run(id);
+    db.prepare('DELETE FROM artifact WHERE content_id = ?').run(id);
+    db.prepare("DELETE FROM event WHERE entity_type='content' AND entity_id=?").run(id);
+    db.prepare('DELETE FROM content WHERE id = ?').run(id);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 function jobToApi(j: ReturnType<typeof jobRepo.listByContent>[number]) {
@@ -455,6 +491,29 @@ const routes: Route[] = [
           createdAt: a.created_at,
         })),
       });
+    },
+  },
+  {
+    method: 'DELETE',
+    match: /^\/api\/content\/([^/]+)$/,
+    async handler(m, _req, res) {
+      const id = m[1]!;
+      if (!contentRepo.get(id)) return sendJson(res, 404, { error: 'content not found' });
+
+      try {
+        deleteContentDeep(id, getDB());
+      } catch (e) {
+        return sendJson(res, 500, { error: e instanceof Error ? e.message : String(e) });
+      }
+
+      // Remove the on-disk asset folder (safe if already absent).
+      try {
+        await rm(join(ASSETS_ROOT, id), { recursive: true, force: true });
+      } catch {
+        /* ignore missing/partial removal */
+      }
+
+      sendJson(res, 200, { deleted: true, id });
     },
   },
   {

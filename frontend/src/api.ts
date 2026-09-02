@@ -336,6 +336,8 @@ export const api = {
       body: JSON.stringify({ scheduledAt }),
     }),
   runJobs: () => req<{ drained: boolean; progressed: boolean }>('/api/jobs/run', { method: 'POST' }),
+  deleteContent: (contentId: string) =>
+    req<{ deleted: boolean; id: string }>(`/api/content/${contentId}`, { method: 'DELETE' }),
   decideApproval: (approvalId: string, status: string, decision?: string) =>
     req<{ decided: boolean; status: string }>(`/api/approvals/${approvalId}/decide`, {
       method: 'POST',

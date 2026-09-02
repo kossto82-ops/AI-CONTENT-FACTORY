@@ -288,6 +288,14 @@ export class Orchestrator {
       const mode = this.effectiveMode((step?.agent ?? job.type) as AgentType, step?.mode);
       if (mode === 'MANUAL' && job.status === 'READY' && !force) return false;
 
+      // A FAILED job being retried (manual "Retry") must first return to
+      // READY: FAILED only allows READY (and CANCELLED), never directly to
+      // RUNNING. This mirrors the auto-retry path in the catch block.
+      if (job.status === 'FAILED') {
+        transitionJob(job, 'READY');
+        this.log(job, 'Retrying failed job — reset to READY');
+      }
+
       transitionJob(job, 'RUNNING');
       this.log(job, `RUNNING ${runner.name}`);
 
