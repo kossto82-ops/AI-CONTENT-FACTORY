@@ -136,6 +136,41 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
         })),
       };
     }
+    case 'render': {
+      const planArt = latestArtefact(content.id, 'production_plan');
+      if (!planArt) throw new Error('No production plan for render');
+      const assetsArt = latestArtefact(content.id, 'assets');
+      if (!assetsArt) throw new Error('No visual assets for render — run Visual first');
+      const voiceArt = latestArtefact(content.id, 'voice');
+      if (!voiceArt) throw new Error('No voice assets for render — run Voice first');
+      const videoArt = latestArtefact(content.id, 'video');
+      if (!videoArt) throw new Error('No assembly manifest for render — run Assembly first');
+      const assets = safeJson(assetsArt.payload) as {
+        scenes?: { sceneId: string; file: string }[];
+      };
+      const voice = safeJson(voiceArt.payload) as {
+        scenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[];
+      };
+      const assemblyManifest = safeJson(videoArt.payload) as {
+        scenes?: { sceneId: string; visualFile?: string; voiceFile?: string; startSec?: number; endSec?: number }[];
+      } | null;
+      // Render per-scene refs come from the assembly manifest (authoritative
+      // timings + file refs); fall back to the plan timings if absent.
+      const buildInput = assets.scenes ?? [];
+      const scenes = (assemblyManifest?.scenes ?? []).map((as) => {
+        const dur = Math.max(0.4, (as.endSec ?? 0) - (as.startSec ?? 0));
+        const asset = buildInput.find((x) => x.sceneId === as.sceneId);
+        const vo = (voice.scenes ?? []).find((x) => x.sceneId === as.sceneId);
+        return {
+          sceneId: as.sceneId,
+          visualFile: as.visualFile ?? asset?.file ?? `${as.sceneId}.png`,
+          voiceFile: as.voiceFile ?? vo?.file ?? `${as.sceneId}.wav`,
+          startSec: as.startSec ?? 0,
+          endSec: as.endSec ?? dur,
+        };
+      });
+      return { plan: safeJson(planArt.payload), contentId: content.id, scenes, assemblyManifest };
+    }
   }
 }
 
@@ -659,6 +694,10 @@ function stageFor(agent: AgentType): import('../domain/types.js').ContentStatus 
       return 'PRODUCING';
     case 'assembly':
       return 'ASSEMBLED';
+    case 'render':
+      // Rendering a real MP4 does not change the content's stage: the content
+      // is already ASSEMBLED once assembly produced the composition data.
+      return 'ASSEMBLED';
     case 'qa':
       return 'QA';
     case 'publisher':
@@ -690,6 +729,8 @@ function defaultArtifactKind(agent: AgentType): string | undefined {
       return 'voice';
     case 'assembly':
       return 'video';
+    case 'render':
+      return 'video_render';
     case 'qa':
       return 'qa';
     case 'publisher':
@@ -717,6 +758,8 @@ function defaultApprovalKind(agent: AgentType): string {
     case 'voice':
       return 'audio';
     case 'assembly':
+      return 'video';
+    case 'render':
       return 'video';
     case 'qa':
       return 'video';

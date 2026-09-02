@@ -31,7 +31,7 @@ export interface PipelineDefinition {
 /** The default brain-first pipeline (Section 20). */
 export const DEFAULT_PIPELINE: PipelineDefinition = {
   id: 'pipeline_brain',
-  name: 'Brain-First (Research -> Script -> Director -> Visual -> Voice -> Assembly -> QA -> Publish)',
+  name: 'Brain-First (Research -> Script -> Director -> Visual -> Voice -> Assembly -> Render -> QA -> Publish)',
   steps: [
     { order: 1, agent: 'research', requiresApproval: true, approvalKind: 'idea' },
     { order: 2, agent: 'script', requiresApproval: true, approvalKind: 'script' },
@@ -39,8 +39,9 @@ export const DEFAULT_PIPELINE: PipelineDefinition = {
     { order: 4, agent: 'visual' },
     { order: 5, agent: 'voice' },
     { order: 6, agent: 'assembly' },
-    { order: 7, agent: 'qa' },
-    { order: 8, agent: 'publisher', requiresApproval: true, approvalKind: 'publication' },
+    { order: 7, agent: 'render' },
+    { order: 8, agent: 'qa' },
+    { order: 9, agent: 'publisher', requiresApproval: true, approvalKind: 'publication' },
   ],
 };
 
@@ -54,6 +55,7 @@ export function defaultAgentMode(agent: AgentType): AgentMode {
     case 'visual':
     case 'voice':
     case 'assembly':
+    case 'render':
     case 'publisher':
     case 'analytics':
     case 'learning':

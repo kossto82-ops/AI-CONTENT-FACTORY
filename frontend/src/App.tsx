@@ -1199,6 +1199,16 @@ function FinalVideoPreview({ content, video }: { content: Content; video: Assemb
           >
             poster
           </a>
+          {content.videoRender && (
+            <a
+              className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-semibold text-emerald-300 hover:bg-emerald-500/30"
+              href={`/api/assets/${content.id}/${content.videoRender.relativePath}`}
+              download="final.mp4"
+              title="Download the rendered MP4"
+            >
+              ⬇ MP4
+            </a>
+          )}
         </div>
       </div>
 

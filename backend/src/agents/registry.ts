@@ -13,6 +13,7 @@ import type { Idea, ProductionPlan, Script } from './contracts.js';
 import type { AssetsManifest } from './visual.js';
 import type { VoiceManifest } from './voice.js';
 import type { FinalVideoManifest } from './assembly.js';
+import { renderAgent, estimateRenderCostEur, type RenderInput } from './render.js';
 
 export type AgentType =
   | 'research'
@@ -21,6 +22,7 @@ export type AgentType =
   | 'visual'
   | 'voice'
   | 'assembly'
+  | 'render'
   | 'qa'
   | 'publisher'
   | 'analytics'
@@ -112,6 +114,20 @@ const runners: Record<AgentType, AgentRunner> = {
       };
     },
   },
+  render: {
+    type: 'render',
+    name: 'Video Render Agent',
+    async run(input) {
+      const out = await renderAgent(input as RenderInput);
+      return {
+        data: out,
+        usage: { tokensIn: 0, tokensOut: 0, requests: 1, costEur: estimateRenderCostEur() },
+        artifactKind: 'video_render',
+        model: out.model,
+        provider: out.provider,
+      };
+    },
+  },
   qa: {
     type: 'qa',
     name: 'QA Agent',
@@ -187,4 +203,4 @@ export function allRunners(): AgentRunner[] {
 }
 
 // Re-export contract types for convenience.
-export type { Idea, Script, ProductionPlan, AssetsManifest, VoiceManifest, FinalVideoManifest };
+export type { Idea, Script, ProductionPlan, AssetsManifest, VoiceManifest, FinalVideoManifest, RenderInput };

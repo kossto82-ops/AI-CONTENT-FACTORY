@@ -21,6 +21,12 @@ export const config = {
     port: num('FACTORY_PORT', 8787),
     host: str('FACTORY_HOST', '127.0.0.1'),
   },
+  // Path to the ffmpeg binary used by the Video Render Agent. Defaults to
+  // whatever `ffmpeg` resolves to on PATH; set FFMPEG_PATH to an absolute path
+  // to a static binary (e.g. a Windows build not on PATH).
+  ffmpeg: {
+    path: str('FFMPEG_PATH', 'ffmpeg'),
+  },
 };
 
 export function resolveDbPath(): string {

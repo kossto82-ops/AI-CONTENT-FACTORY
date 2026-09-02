@@ -427,6 +427,8 @@ const routes: Route[] = [
           : null;
         const videoArt = artifactRepo.latest(c.id, 'video');
         const assemblyManifest = videoArt ? safeParse(videoArt.payload) : null;
+        const renderArt = artifactRepo.latest(c.id, 'video_render');
+        const videoRender = renderArt ? safeParse(renderArt.payload) : null;
         const publishArt = artifactRepo.latest(c.id, 'publish_package');
         const publishPackage = publishArt ? safeParse(publishArt.payload) : null;
         return {
@@ -439,6 +441,7 @@ const routes: Route[] = [
           assetScenes: assetManifest?.scenes ?? [],
           audioScenes: audioManifest?.scenes ?? [],
           assemblyManifest,
+          videoRender,
           publishPackage,
         };
       });
@@ -725,6 +728,7 @@ function agentDefaultMode(type: string): AgentMode {
     case 'visual':
     case 'voice':
     case 'assembly':
+    case 'render':
     case 'publisher':
     case 'analytics':
     case 'learning':

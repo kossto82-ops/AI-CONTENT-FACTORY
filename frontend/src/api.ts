@@ -89,6 +89,19 @@ export interface AssemblyManifest {
   costEur: number;
 }
 
+export interface VideoRender {
+  contentId: string;
+  file: string;
+  relativePath: string;
+  resolution: string;
+  fps: number;
+  durationSec: number;
+  mime: string;
+  model: string;
+  provider: string;
+  scenes: { sceneId: string; startSec: number; endSec: number; durationSec: number }[];
+}
+
 export interface PublishPackage {
   status: 'SCHEDULED' | 'PUBLISHED';
   title: string;
@@ -193,6 +206,7 @@ export interface Content {
   assetScenes?: { sceneId: string; file: string }[];
   audioScenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[];
   assemblyManifest?: AssemblyManifest | null;
+  videoRender?: VideoRender | null;
   publishPackage?: PublishPackage | null;
 }
 

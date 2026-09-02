@@ -14,6 +14,7 @@ describe('pipeline store', () => {
       'visual',
       'voice',
       'assembly',
+      'render',
       'qa',
       'publisher',
     ]);
@@ -43,8 +44,9 @@ describe('pipeline store', () => {
   it('resolves default modes per agent when no override', () => {
     const p = loadPipeline(DEFAULT_PIPELINE.id);
     expect(p.steps[0]!.agent).toBe('research');
-    expect(p.steps[6]!.agent).toBe('qa');
-    expect(p.steps[7]!.agent).toBe('publisher');
+    expect(p.steps[6]!.agent).toBe('render');
+    expect(p.steps[7]!.agent).toBe('qa');
+    expect(p.steps[8]!.agent).toBe('publisher');
   });
 
   it('reconciles a stale stored pipeline (missing injected steps) without clobbering overrides', () => {
@@ -68,6 +70,7 @@ describe('pipeline store', () => {
       'visual',
       'voice',
       'assembly',
+      'render',
       'qa',
       'publisher',
     ]);
@@ -76,6 +79,7 @@ describe('pipeline store', () => {
     // Injected steps come from the code default.
     expect(p.steps.find((s) => s.agent === 'visual')).toBeDefined();
     expect(p.steps.find((s) => s.agent === 'assembly')).toBeDefined();
+    expect(p.steps.find((s) => s.agent === 'render')).toBeDefined();
     expect(p.steps.find((s) => s.agent === 'publisher')).toBeDefined();
   });
 });

@@ -25,6 +25,10 @@ build/
 backend/assets/
 /factory/backend/assets/
 
+# Local toolchain binaries (ffmpeg static build downloaded for the Render Agent)
+# Install at backend/bin/ and point FFMPEG_PATH at it; never committed.
+backend/bin/
+
 # OS
 .DS_Store
 Thumbs.db
