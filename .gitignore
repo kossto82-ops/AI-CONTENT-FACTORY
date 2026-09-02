@@ -25,9 +25,6 @@ build/
 backend/assets/
 /factory/backend/assets/
 
-# Skills / local config (never committed)
-Skills/
-
 # OS
 .DS_Store
 Thumbs.db

@@ -1,6 +1,11 @@
 import { gatewayExecute } from '../gateway/gateway.js';
 import type { GatewayUsage } from '../gateway/types.js';
-import { ideaListSchema, type IdeaList } from './contracts.js';
+import {
+  channelPromptOverride,
+  ideaListSchema,
+  type ChannelConfig,
+  type IdeaList,
+} from './contracts.js';
 
 /**
  * Research / Trend Agent — discover ideas, analyze trends/formats, produce
@@ -11,6 +16,8 @@ export interface ResearchInput {
   targetAge?: string;
   niche?: string;
   count?: number;
+  /** Channel config drives audience + prompt overrides (optional — defaults). */
+  channelConfig?: ChannelConfig;
 }
 
 export interface ResearchOutput {
@@ -23,7 +30,8 @@ export interface ResearchOutput {
 export async function researchAgent(input: ResearchInput): Promise<ResearchOutput> {
   const count = input.count ?? 5;
   const topic = input.topic ?? 'curiosity and friendship for young children';
-  const age = input.targetAge ?? '4-7';
+  const age = input.targetAge ?? input.channelConfig?.audience.targetAge ?? '4-7';
+  const override = channelPromptOverride(input.channelConfig, 'research');
 
   const schemaHint = `{"ideas":[{"title":"string","concept":"string","target_age":"string","format":"string","hook":"string","reason":"string","score":0.0}]} with exactly ${count} ideas`;
 
@@ -37,6 +45,7 @@ export async function researchAgent(input: ResearchInput): Promise<ResearchOutpu
         role: 'user',
         content:
           `Topic/niche: ${topic}\nTarget age: ${age}\n` +
+          (override ? `Channel directive: ${override}\n` : '') +
           `Generate exactly ${count} content ideas. Format field is one of: story | explainer | singalong | quiz | "how-to".`,
       },
     ],

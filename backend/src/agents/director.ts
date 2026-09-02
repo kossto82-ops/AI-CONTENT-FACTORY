@@ -1,6 +1,12 @@
 import { gatewayExecute } from '../gateway/gateway.js';
 import type { GatewayUsage } from '../gateway/types.js';
-import { productionPlanSchema, type ProductionPlan, type Script } from './contracts.js';
+import {
+  channelPromptOverride,
+  productionPlanSchema,
+  type ChannelConfig,
+  type ProductionPlan,
+  type Script,
+} from './contracts.js';
 
 /**
  * Director Agent — does NOT produce video. Converts a script into a
@@ -16,6 +22,7 @@ export interface RevisionContext {
 export interface PlanInput {
   script: Script;
   revision?: RevisionContext;
+  channelConfig?: ChannelConfig;
 }
 
 export interface PlanOutput {
@@ -28,16 +35,22 @@ export interface PlanOutput {
 export async function directorAgent(input: PlanInput): Promise<PlanOutput> {
   const script = input.script;
   const revision = input.revision;
+  const cfg = input.channelConfig;
+  const override = channelPromptOverride(cfg, 'director');
 
   const schemaHint =
     '{"title":"string","targetAge":"string","totalDurationSeconds":number,"visualStyle":"string",' +
     '"scenes":[{"id":"string","durationSeconds":number,"characters":["string"],"location":"string",' +
     '"action":"string","camera":"string","emotion":"string","narration":"string"}]}';
 
+  const styleBible = cfg?.visualStyle
+    ? ` Style bible: visual style "${cfg.visualStyle.style}".${cfg.visualStyle.characterDescription ? ` Character/art: ${cfg.visualStyle.characterDescription}` : ''}`
+    : '';
   const system =
     'You are a video director for children\'s shorts. Convert the script into a precise ProductionPlan: a ' +
     'shot-by-shot technical contract. Specify visual style and a camera framing for each scene. This plan will ' +
-    'feed asset generation, voice, and assembly. Be unambiguous and reproducible.';
+    'feed asset generation, voice, and assembly. Be unambiguous and reproducible.' +
+    styleBible;
 
   const revisionBlock = revision
     ? [
@@ -62,6 +75,7 @@ export async function directorAgent(input: PlanInput): Promise<PlanOutput> {
         content:
           'Convert this script into a ProductionPlan (keep the same scenes and narration):\n' +
           JSON.stringify(script, null, 2) +
+          (override ? `\nChannel directive: ${override}` : '') +
           revisionBlock,
       },
     ],

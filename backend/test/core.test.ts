@@ -4,6 +4,7 @@ import {
   InvalidTransitionError,
   transitionJob,
 } from '../src/orchestrator/state.js';
+import { jobRepo } from '../src/db/repository.js';
 import type { JobRow } from '../src/db/repository.js';
 
 function makeJob(status: JobRow['status']): JobRow {
@@ -71,5 +72,32 @@ describe('job state machine', () => {
     const j = makeJob('RUNNING');
     transitionJob(j, 'COMPLETED');
     expect(j.completed_at).toBeTruthy();
+  });
+});
+
+describe('crash recovery (recoverInterrupted)', () => {
+  it('resets jobs stuck in RUNNING back to READY', () => {
+    const j = { ...makeJob('RUNNING'), id: 'job_recover_1' };
+    jobRepo.insert(j);
+
+    // A fresh RUNNING row left by a previous (killed) process.
+    expect(jobRepo.get(j.id)!.status).toBe('RUNNING');
+
+    const recovered = jobRepo.recoverInterrupted();
+
+    expect(recovered).toBeGreaterThanOrEqual(1);
+    const after = jobRepo.get(j.id)!;
+    expect(after.status).toBe('READY');
+    expect(after.started_at).toBeNull();
+    expect(after.error).toContain('recovered on restart');
+  });
+
+  it('does not touch jobs that are not RUNNING', () => {
+    const ready = { ...makeJob('READY'), id: 'job_recover_2' };
+    jobRepo.insert(ready);
+
+    const before = jobRepo.get(ready.id)!;
+    jobRepo.recoverInterrupted();
+    expect(jobRepo.get(ready.id)!.status).toBe(before.status);
   });
 });

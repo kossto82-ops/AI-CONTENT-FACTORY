@@ -45,6 +45,15 @@ export interface ContentRow {
   status: ContentStatus;
   current_version: number;
   meta: string;
+  channel_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChannelRow {
+  id: string;
+  name: string;
+  config: string | null; // JSON ChannelConfig (NULL = default)
   created_at: string;
   updated_at: string;
 }
@@ -147,6 +156,17 @@ export function mapContent(r: SqlRow): ContentRow {
     status: r.status as ContentStatus,
     current_version: Number(r.current_version),
     meta: String(r.meta),
+    channel_id: r.channel_id == null ? null : String(r.channel_id),
+    created_at: String(r.created_at),
+    updated_at: String(r.updated_at),
+  };
+}
+
+export function mapChannel(r: SqlRow): ChannelRow {
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    config: r.config == null ? null : String(r.config),
     created_at: String(r.created_at),
     updated_at: String(r.updated_at),
   };
@@ -270,6 +290,25 @@ export const jobRepo = {
       )
       .all() as SqlRow[]).map(mapJob);
   },
+
+  /**
+   * Crash recovery: jobs stuck in RUNNING were mid-flight in a previous
+   * process that died (e.g. a dev-server restart or a hung gateway call).
+   * Reset them to READY so the next drain re-runs them instead of leaving
+   * them permanently stuck. Returns the number of jobs recovered.
+   */
+  recoverInterrupted(): number {
+    const stuck = getDB().prepare("SELECT id FROM job WHERE status='RUNNING'").all() as { id: string }[];
+    for (const s of stuck) {
+      getDB()
+        .prepare("UPDATE job SET status='READY', started_at=NULL, error=? WHERE id=?")
+        .run(
+          'recovered on restart: previous process interrupted while running',
+          s.id,
+        );
+    }
+    return stuck.length;
+  },
 };
 
 // ---------------- ContentRepository ----------------
@@ -279,12 +318,12 @@ export const contentRepo = {
     getDB()
       .prepare(
         `INSERT INTO content
-         (id, title, target_age, format, hook, status, current_version, meta, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+         (id, title, target_age, format, hook, status, current_version, meta, channel_id, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         c.id, c.title, c.target_age, c.format, c.hook, c.status, c.current_version,
-        c.meta, c.created_at, c.updated_at,
+        c.meta, c.channel_id, c.created_at, c.updated_at,
       );
   },
 
@@ -311,12 +350,39 @@ export const contentRepo = {
     getDB()
       .prepare(
         `UPDATE content SET title=?, target_age=?, format=?, hook=?, status=?,
-         current_version=?, meta=?, updated_at=? WHERE id=?`,
+         current_version=?, meta=?, channel_id=?, updated_at=? WHERE id=?`,
       )
       .run(
         c.title, c.target_age, c.format, c.hook, c.status, c.current_version, c.meta,
-        nowIso(), c.id,
+        c.channel_id, nowIso(), c.id,
       );
+  },
+};
+
+// ---------------- ChannelRepository ----------------
+
+export const channelRepo = {
+  insert(ch: ChannelRow): void {
+    getDB()
+      .prepare(
+        `INSERT INTO channel (id, name, config, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      )
+      .run(ch.id, ch.name, ch.config, ch.created_at, ch.updated_at);
+  },
+
+  get(id: string): ChannelRow | undefined {
+    const r = getDB().prepare('SELECT * FROM channel WHERE id = ?').get(id) as SqlRow | undefined;
+    return r ? mapChannel(r) : undefined;
+  },
+
+  list(): ChannelRow[] {
+    return (getDB().prepare('SELECT * FROM channel ORDER BY created_at').all() as SqlRow[]).map(mapChannel);
+  },
+
+  updateConfig(id: string, name: string, config: string | null): void {
+    getDB()
+      .prepare('UPDATE channel SET name=?, config=?, updated_at=? WHERE id=?')
+      .run(name, config, nowIso(), id);
   },
 };
 

@@ -5,6 +5,8 @@ import {
   type AgentMode,
   type Approval,
   type AssemblyManifest,
+  type Channel,
+  type ChannelConfig,
   type Content,
   type Dashboard,
   type Pipeline,
@@ -16,7 +18,15 @@ import {
 } from './api';
 import { Badge, Btn, Card, SectionTitle, Stat, toneForStatus } from './ui';
 
-type Tab = 'dashboard' | 'analytics' | 'learning' | 'agents' | 'content' | 'approvals' | 'pipeline';
+type Tab =
+  | 'dashboard'
+  | 'analytics'
+  | 'learning'
+  | 'agents'
+  | 'content'
+  | 'approvals'
+  | 'pipeline'
+  | 'channels';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -24,6 +34,7 @@ export function App() {
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [content, setContent] = useState<Content[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsResult | null>(null);
@@ -34,10 +45,11 @@ export function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [d, a, c, ap, p, an, ln] = await Promise.all([
+      const [d, a, c, ch, ap, p, an, ln] = await Promise.all([
         api.dashboard(),
         api.agents(),
         api.content(),
+        api.channels(),
         api.approvals(),
         api.pipelines(),
         api.analytics(),
@@ -46,6 +58,7 @@ export function App() {
       setDash(d);
       setAgents(a.agents);
       setContent(c.content);
+      setChannels(ch.channels);
       setApprovals(ap.approvals);
       setPipeline(p.active);
       setAnalytics(an);
@@ -112,6 +125,7 @@ export function App() {
     { id: 'learning', label: 'Learning' },
     { id: 'pipeline', label: 'Pipeline' },
     { id: 'agents', label: 'Agents' },
+    { id: 'channels', label: 'Channels' },
     { id: 'content', label: 'Content' },
     { id: 'approvals', label: `Approvals${approvals.length ? ` (${approvals.length})` : ''}` },
   ];
@@ -146,11 +160,20 @@ export function App() {
           <DashboardView
             dash={dash}
             approvals={approvals}
-            onStartIdea={() =>
-              wrap(api.createContent('curiosity and friendship for young children', '4-7'), 'Idea created')
+            channels={channels}
+            onStartIdea={(channelId) =>
+              wrap(api.createContent('curiosity and friendship for young children', '4-7', channelId), 'Idea created')
             }
             onRunJobs={() => wrap(api.runJobs(), 'Jobs drained')}
             onRunManualJob={runManualJob}
+            busy={busy}
+          />
+        )}
+        {tab === 'channels' && (
+          <ChannelsView
+            channels={channels}
+            onCreateChannel={(name, config) => wrap(api.createChannel(name, config), `Channel "${name}" created`)}
+            onUpdateChannel={(id, patch) => wrap(api.updateChannel(id, patch), 'Channel updated')}
             busy={busy}
           />
         )}
@@ -163,6 +186,7 @@ export function App() {
         {tab === 'content' && (
           <ContentView
             content={content}
+            channels={channels}
             onStartPipeline={(id) => wrap(api.startPipeline(id), 'Pipeline started')}
             onRunJobs={() => wrap(api.runJobs(), 'Jobs drained')}
             onRevisePlan={revisePlan}
@@ -235,6 +259,7 @@ function Header({
 function DashboardView({
   dash,
   approvals,
+  channels,
   onStartIdea,
   onRunJobs,
   onRunManualJob,
@@ -242,12 +267,14 @@ function DashboardView({
 }: {
   dash: Dashboard | null;
   approvals: Approval[];
-  onStartIdea: () => void;
+  channels: Channel[];
+  onStartIdea: (channelId: string | undefined) => void;
   onRunJobs: () => void;
   onRunManualJob: (jobId: string) => void;
   busy: boolean;
 }) {
   const counts = dash?.counts ?? {};
+  const [ideaChannel, setIdeaChannel] = useState<string>('');
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
@@ -259,12 +286,41 @@ function DashboardView({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Btn kind="primary" onClick={onStartIdea} disabled={busy}>
+        <Btn
+          kind="primary"
+          onClick={() => onStartIdea(ideaChannel || undefined)}
+          disabled={busy}
+          title="Create a new idea of the selected channel type"
+        >
           + New Idea
         </Btn>
+        <label className="flex items-center gap-2 text-sm text-slate-400">
+          Channel
+          <select
+            className="rounded-md border border-ink-700 bg-ink-800 px-2 py-1 text-sm text-slate-200"
+            value={ideaChannel}
+            onChange={(e) => setIdeaChannel(e.target.value)}
+            disabled={busy}
+          >
+            <option value="">Default (no channel)</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <Btn onClick={onRunJobs} disabled={busy} title="Advance any queued jobs (pipeline flow)">
           Run queued jobs
         </Btn>
+      </div>
+      <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-500">
+        {channels.map((c) => (
+          <span key={c.id} className="rounded bg-ink-800 px-2 py-0.5 font-mono">
+            {c.name} · {c.config?.audience.targetAge ?? '—'} · {c.config?.format.defaultDurationSec ?? '—'}s
+          </span>
+        ))}
+        {channels.length === 0 && <span>No channels configured — content falls back to the default 15s config.</span>}
       </div>
 
       <Card className="p-4">
@@ -578,6 +634,214 @@ function AgentsView({ agents }: { agents: Agent[] }) {
   );
 }
 
+function ChannelsView({
+  channels,
+  onCreateChannel,
+  onUpdateChannel,
+  busy,
+}: {
+  channels: Channel[];
+  onCreateChannel: (name: string, config: ChannelConfig | null) => void;
+  onUpdateChannel: (id: string, patch: { name?: string; config?: ChannelConfig | null }) => void;
+  busy: boolean;
+}) {
+  const [name, setName] = useState('');
+  const [configText, setConfigText] = useState(
+    JSON.stringify(
+      {
+        audience: { targetAge: '3-8', language: 'global', languageIndependent: true },
+        format: {
+          defaultDurationSec: 15,
+          structure: 'hook-caos-cta',
+          beats: [
+            { name: 'Hook', start: 0, end: 3, description: 'mystery object / bright box / absurd mistake' },
+            { name: 'Chaos', start: 3, end: 11, description: 'escalation with cartoon SFX (boing, pop, laughter)' },
+            { name: 'CTA', start: 11, end: 15, description: 'exaggerated reaction + perfect loop' },
+          ],
+        },
+        visualStyle: { style: '3D toy monster cartoon', characterDescription: '' },
+        rhythm: { postsPerDay: '2-3', pacingWordsPerSec: 2.8 },
+        promptOverrides: { research: '', script: '', director: '', visual: '' },
+      },
+      null,
+      2,
+    ),
+  );
+  const [formError, setFormError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const parseConfig = (): ChannelConfig | null | undefined => {
+    if (!configText.trim()) return null;
+    try {
+      const parsed = JSON.parse(configText);
+      return parsed as ChannelConfig;
+    } catch {
+      setFormError('Config is not valid JSON.');
+      return undefined;
+    }
+  };
+
+  const submitCreate = () => {
+    setFormError(null);
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setFormError('Channel name is required.');
+      return;
+    }
+    const cfg = parseConfig();
+    if (cfg === undefined) return;
+    onCreateChannel(trimmed, cfg);
+    setName('');
+  };
+
+  const submitEdit = (id: string) => {
+    setFormError(null);
+    const cfg = parseConfig();
+    if (cfg === undefined) return;
+    const ch = channels.find((c) => c.id === id);
+    if (!ch) return;
+    const patch: { name?: string; config?: ChannelConfig | null } = {};
+    if (name !== ch.name) patch.name = name;
+    if (cfg !== null || ch.config !== null) patch.config = cfg;
+    onUpdateChannel(id, patch);
+    setEditingId(null);
+    setName('');
+  };
+
+  const startEdit = (c: Channel) => {
+    setEditingId(c.id);
+    setName(c.name);
+    setConfigText(JSON.stringify(c.config ?? {}, null, 2));
+    setFormError(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <SectionTitle>Channels ({channels.length})</SectionTitle>
+        <p className="mt-1 text-xs text-slate-500">
+          A channel parameterizes the whole pipeline (audience, duration, beat structure, visual style).
+          Duplicate an existing channel by copying its config when creating a new one — no code changes.
+          Content with no channel falls back to the default 15s / hook-caos-cta config.
+        </p>
+      </div>
+
+      <Card className="p-4">
+        <SectionTitle>Create channel</SectionTitle>
+        <div className="mt-3 flex flex-col gap-2">
+          <input
+            className="rounded-md border border-ink-700 bg-ink-800 px-3 py-1.5 text-sm text-slate-200"
+            placeholder="Channel name (e.g. ToyMonster Club)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={busy}
+          />
+          <textarea
+            className="min-h-56 w-full rounded-md border border-ink-700 bg-ink-800 px-3 py-2 font-mono text-xs text-slate-200"
+            value={configText}
+            onChange={(e) => setConfigText(e.target.value)}
+            disabled={busy}
+            spellCheck={false}
+          />
+        </div>
+        {formError && <p className="mt-2 text-xs text-red-400">{formError}</p>}
+        <div className="mt-3 flex items-center gap-2">
+          <Btn kind="primary" onClick={submitCreate} disabled={busy}>
+            + Create channel
+          </Btn>
+          {editingId && (
+            <Btn onClick={() => submitEdit(editingId)} disabled={busy}>
+              Save changes to "{channels.find((c) => c.id === editingId)?.name}"
+            </Btn>
+          )}
+          {editingId && (
+            <Btn kind="ghost" onClick={() => { setEditingId(null); setName(''); setFormError(null); }} disabled={busy}>
+              Cancel
+            </Btn>
+          )}
+        </div>
+      </Card>
+
+      <div className="space-y-3">
+        {channels.length === 0 && (
+          <Card className="p-6 text-sm text-slate-500">No channels yet.</Card>
+        )}
+        {channels.map((c) => {
+          const editing = editingId === c.id;
+          return (
+            <Card key={c.id} className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-100">{c.name}</div>
+                  <div className="font-mono text-[11px] text-slate-500">
+                    {c.id} · {c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}
+                  </div>
+                </div>
+                <Btn kind="ghost" onClick={() => (editing ? submitEdit(c.id) : startEdit(c))} disabled={busy}>
+                  {editing ? 'Save' : 'Edit config'}
+                </Btn>
+              </div>
+              {!editing && c.config && (
+                <div className="mt-3 max-w-3xl space-y-2 text-sm">
+                  <ChannelSummary config={c.config} />
+                </div>
+              )}
+              {!editing && !c.config && (
+                <p className="mt-2 text-xs text-slate-500">No config set — falls back to the default 15s config.</p>
+              )}
+              {editing && (
+                <div className="mt-3 flex flex-col gap-2">
+                  <input
+                    className="rounded-md border border-ink-700 bg-ink-800 px-3 py-1.5 text-sm text-slate-200"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={busy}
+                  />
+                  <textarea
+                    className="min-h-56 w-full rounded-md border border-ink-700 bg-ink-800 px-3 py-2 font-mono text-xs text-slate-200"
+                    value={configText}
+                    onChange={(e) => setConfigText(e.target.value)}
+                    disabled={busy}
+                    spellCheck={false}
+                  />
+                  {formError && <p className="text-xs text-red-400">{formError}</p>}
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ChannelSummary({ config }: { config: ChannelConfig }) {
+  return (
+    <>
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-400">
+        <span>Audience: <span className="text-slate-200">{config.audience.targetAge}</span></span>
+        <span>Language: <span className="text-slate-200">{config.audience.language}</span></span>
+        <span>Duration: <span className="text-slate-200">{config.format.defaultDurationSec}s</span></span>
+        <span>Structure: <span className="text-slate-200">{config.format.structure}</span></span>
+        <span>Pacing: <span className="text-slate-200">{config.rhythm.pacingWordsPerSec} w/s</span></span>
+        <span>Posts/day: <span className="text-slate-200">{config.rhythm.postsPerDay}</span></span>
+      </div>
+      <div className="text-xs text-slate-400">
+        Style: <span className="text-slate-200">{config.visualStyle.style}</span>
+      </div>
+      {config.format.beats.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {config.format.beats.map((b) => (
+            <span key={b.name} className="rounded bg-ink-800 px-2 py-0.5 font-mono text-[11px] text-slate-300">
+              {b.name} {b.start}–{b.end}s
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function PipelineView({
   pipeline,
   onSaveStep,
@@ -658,12 +922,14 @@ function StepCard({
 }
 function ContentView({
   content,
+  channels,
   onStartPipeline,
   onRunJobs,
   onRevisePlan,
   busy,
 }: {
   content: Content[];
+  channels: Channel[];
   onStartPipeline: (id: string) => void;
   onRunJobs: () => void;
   onRevisePlan: (id: string) => void;
@@ -682,7 +948,7 @@ function ContentView({
       )}
       <div className="space-y-3">
         {content.map((c) => (
-          <ContentCard key={c.id} c={c} onStartPipeline={onStartPipeline} onRevisePlan={onRevisePlan} busy={busy} />
+          <ContentCard key={c.id} c={c} channels={channels} onStartPipeline={onStartPipeline} onRevisePlan={onRevisePlan} busy={busy} />
         ))}
       </div>
     </div>
@@ -701,6 +967,7 @@ const QA_CHECKLIST_LABELS: { key: keyof QaChecklist; label: string }[] = [
   { key: 'coherence_ok', label: 'Coherence' },
   { key: 'appropriateness_ok', label: 'Appropriate' },
   { key: 'metadata_complete', label: 'Metadata' },
+  { key: 'beat_structure_ok', label: 'Beats' },
 ];
 
 function QaChecklistGrid({ checklist }: { checklist: QaChecklist }) {
@@ -766,17 +1033,20 @@ function PublishPanel({ pkg }: { pkg: PublishPackage }) {
 
 function ContentCard({
   c,
+  channels,
   onStartPipeline,
   onRevisePlan,
   busy,
 }: {
   c: Content;
+  channels: Channel[];
   onStartPipeline: (id: string) => void;
   onRevisePlan: (id: string) => void;
   busy: boolean;
 }) {
   const qa = c.latestQa;
   const video = c.assemblyManifest ?? null;
+  const channelName = c.channelId ? channels.find((ch) => ch.id === c.channelId)?.name : null;
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -784,6 +1054,7 @@ function ContentCard({
           <div className="font-semibold text-slate-100">{c.title ?? '(untitled idea)'}</div>
           <div className="font-mono text-[11px] text-slate-500">
             {c.id} · {c.format ?? '—'} · {c.targetAge ?? '—'}
+            {channelName ? ` · ${channelName}` : ' · default'}
             {c.planVersion ? ` · plan v${c.planVersion}` : ''}
           </div>
 {qa && (

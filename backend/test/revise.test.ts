@@ -59,6 +59,7 @@ function seedContent(withApprovedQa = false): string {
     status: 'QA',
     current_version: 0,
     meta: '{}',
+    channel_id: null,
     created_at: nowIso(),
     updated_at: nowIso(),
   });

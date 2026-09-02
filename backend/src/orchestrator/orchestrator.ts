@@ -1,12 +1,14 @@
 import {
   approvalRepo,
   artifactRepo,
+  channelRepo,
   contentRepo,
   executionRepo,
   jobRepo,
   persistEvent,
   type ApprovalRow,
   type ArtifactRow,
+  type ContentRow,
   type JobRow,
 } from '../db/repository.js';
 import { eventBus } from '../events/bus.js';
@@ -19,31 +21,54 @@ import {
 import type { PipelineDefinition } from '../pipeline.js';
 import { defaultAgentMode } from '../pipeline.js';
 import { getRunner, type AgentType } from '../agents/registry.js';
+import {
+  DEFAULT_CHANNEL_CONFIG,
+  type ChannelConfig,
+} from '../agents/contracts.js';
 import { advanceContent, transitionJob } from './state.js';
+
+/** Resolve the effective channel config for a content (channel_id -> config, else default). */
+export function channelConfigFor(content: ContentRow): ChannelConfig {
+  if (content.channel_id) {
+    const ch = channelRepo.get(content.channel_id);
+    if (ch?.config) {
+      try {
+        return { ...DEFAULT_CHANNEL_CONFIG, ...JSON.parse(ch.config) } as ChannelConfig;
+      } catch {
+        // fall through to default on malformed config
+      }
+    }
+  }
+  return DEFAULT_CHANNEL_CONFIG;
+}
 
 /** Input builders feed each agent from prior artifacts/content state. */
 function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof contentRepo.get>>): unknown {
   if (!content) throw new Error('Content not found');
   const meta = safeJson(content.meta, {}) as { topic?: string; targetAge?: string };
+  // Resolve the owning channel's config once; pass to every creative agent so
+  // audience/format/structure/character are consistent down the pipeline.
+  const channelConfig = channelConfigFor(content);
 
   switch (agent) {
     case 'research':
       return {
         topic: meta.topic ?? 'curiosity and friendship for young children',
-        targetAge: meta.targetAge ?? content.target_age ?? '4-7',
+        targetAge: channelConfig.audience.targetAge,
         count: 5,
+        channelConfig,
       };
     case 'script': {
       const ideaArt = latestArtefact(content.id, 'idea');
       if (!ideaArt) throw new Error('No idea artifact selected for scripting');
       const ideas = safeJson(ideaArt.payload, { ideas: [] }) as { ideas: { score: number }[] };
       const chosen = pickBestIdea(ideas.ideas);
-      return { idea: chosen };
+      return { idea: chosen, channelConfig };
     }
     case 'director': {
       const scriptArt = latestArtefact(content.id, 'script');
       if (!scriptArt) throw new Error('No script artifact for direction');
-      return { script: safeJson(scriptArt.payload) };
+      return { script: safeJson(scriptArt.payload), channelConfig };
     }
     case 'qa': {
       const planArt = latestArtefact(content.id, 'production_plan');
@@ -53,6 +78,7 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
         plan: safeJson(planArt.payload),
         scriptTitle: c.title,
         contentId: content.id,
+        channelConfig,
         video: latestArtefact(content.id, 'video') ? safeJson(latestArtefact(content.id, 'video')!.payload) : null,
         assets: latestArtefact(content.id, 'assets') ? safeJson(latestArtefact(content.id, 'assets')!.payload) : null,
         voice: latestArtefact(content.id, 'voice') ? safeJson(latestArtefact(content.id, 'voice')!.payload) : null,
@@ -67,18 +93,19 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
       return {
         plan: safeJson(planArt.payload),
         contentId: content.id,
+        channelConfig,
         scheduledAt,
       };
     }
     case 'visual': {
       const planArt = latestArtefact(content.id, 'production_plan');
       if (!planArt) throw new Error('No production plan for visual');
-      return { plan: safeJson(planArt.payload), contentId: content.id };
+      return { plan: safeJson(planArt.payload), contentId: content.id, channelConfig };
     }
     case 'voice': {
       const planArt = latestArtefact(content.id, 'production_plan');
       if (!planArt) throw new Error('No production plan for voice');
-      return { plan: safeJson(planArt.payload), contentId: content.id };
+      return { plan: safeJson(planArt.payload), contentId: content.id, channelConfig };
     }
     case 'assembly': {
       const planArt = latestArtefact(content.id, 'production_plan');
@@ -138,20 +165,30 @@ export interface DecideApprovalOptions {
 
 export class Orchestrator {
   /**
-   * Create a fresh content object (IDEA) with optional meta (e.g. topic).
+   * Create a fresh content object (IDEA) with optional meta (e.g. topic) and an
+   * optional channel id. When a channel is set, its audience targetAge is used
+   * as the RESEARCHED target age unless meta.targetAge overrides it.
    * Returns content id.
    */
-  createContent(meta: Record<string, unknown> = {}): string {
+  createContent(meta: Record<string, unknown> = {}, channelId?: string): string {
     const id = newId('content');
+    const channel = channelId ? channelRepo.get(channelId) : undefined;
+    const cfg = channelConfigFor({
+      channel_id: channelId ?? null,
+    } as ContentRow);
+    const targetAge =
+      (meta.targetAge as string | undefined) ??
+      (channel ? cfg.audience.targetAge : null);
     contentRepo.insert({
       id,
       title: null,
-      target_age: null,
+      target_age: targetAge ?? null,
       format: null,
       hook: null,
       status: 'IDEA',
       current_version: 0,
       meta: JSON.stringify(meta),
+      channel_id: channelId ?? null,
       created_at: nowIso(),
       updated_at: nowIso(),
     });
@@ -159,7 +196,7 @@ export class Orchestrator {
       type: 'content.created',
       entityId: id,
       entityType: 'content',
-      payload: meta,
+      payload: { ...meta, channelId: channelId ?? null },
       at: nowIso(),
     });
     return id;

@@ -40,6 +40,7 @@ export interface QaChecklist {
   coherence_ok: boolean | null;
   appropriateness_ok: boolean | null;
   metadata_complete: boolean | null;
+  beat_structure_ok: boolean | null;
 }
 
 export interface QaReviewScope {
@@ -177,6 +178,7 @@ export interface Content {
   hook: string | null;
   status: string;
   currentVersion: number;
+  channelId: string | null;
   createdAt: string;
   planVersion?: number;
   latestQa?: {
@@ -243,6 +245,28 @@ export interface PipelinesResponse {
   active: Pipeline;
 }
 
+export interface ChannelBeat {
+  name: string;
+  start: number;
+  end: number;
+  description: string;
+}
+
+export interface ChannelConfig {
+  audience: { targetAge: string; language: string; languageIndependent: boolean };
+  format: { defaultDurationSec: number; structure: string; beats: ChannelBeat[] };
+  visualStyle: { style: string; characterDescription: string };
+  rhythm: { postsPerDay: string; pacingWordsPerSec: number };
+  promptOverrides: { research: string; script: string; director: string; visual: string };
+}
+
+export interface Channel {
+  id: string;
+  name: string;
+  config: ChannelConfig | null;
+  createdAt?: string;
+}
+
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { 'content-type': 'application/json' },
@@ -288,10 +312,21 @@ export const api = {
       `/api/content/${contentId}/revise/director`,
       { method: 'POST' },
     ),
-  createContent: (topic?: string, targetAge?: string) =>
+  createContent: (topic?: string, targetAge?: string, channelId?: string) =>
     req<{ id: string }>('/api/content', {
       method: 'POST',
-      body: JSON.stringify({ topic, targetAge }),
+      body: JSON.stringify({ topic, targetAge, channelId }),
+    }),
+  channels: () => req<{ channels: Channel[] }>('/api/channels'),
+  createChannel: (name: string, config: ChannelConfig | null) =>
+    req<{ id: string; name: string; config: ChannelConfig | null; createdAt: string }>('/api/channels', {
+      method: 'POST',
+      body: JSON.stringify({ name, config }),
+    }),
+  updateChannel: (id: string, patch: { name?: string; config?: ChannelConfig | null }) =>
+    req<{ id: string; name: string; config: ChannelConfig | null }>(`/api/channels/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
     }),
   startPipeline: (contentId: string) =>
     req<{ started: boolean; jobId: string }>(`/api/pipeline/${contentId}/start`, { method: 'POST' }),

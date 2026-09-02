@@ -8,7 +8,11 @@ import {
   IMAGE_SIZE,
   type ImageGenerationResult,
 } from '../gateway/image.js';
-import type { ProductionPlan } from './contracts.js';
+import {
+  channelPromptOverride,
+  type ChannelConfig,
+  type ProductionPlan,
+} from './contracts.js';
 
 /**
  * Visual Agent — generates one still image per scene from the ProductionPlan.
@@ -38,6 +42,7 @@ export interface AssetsManifest {
 export interface VisualInput {
   plan: ProductionPlan;
   contentId: string;
+  channelConfig?: ChannelConfig;
 }
 
 export interface VisualOutput {
@@ -72,13 +77,16 @@ export function buildScenePrompt(
   plan: ProductionPlan,
   scene: ProductionPlan['scenes'][number],
   index: number,
+  channelConfig?: ChannelConfig,
 ): string {
-  const cast = (plan.visualStyle || "children's cartoon").trim();
+  const cast = (plan.visualStyle || channelConfig?.visualStyle.style || "children's cartoon").trim();
+  const character = channelConfig?.visualStyle.characterDescription?.trim();
   const chars = (scene.characters ?? []).join(', ');
   const parts = [
     scene.action,
     scene.location ? `in ${scene.location}` : '',
     chars ? `featuring ${chars}` : '',
+    character ? `character: ${character}` : '',
     `emotion: ${scene.emotion ?? 'neutral'}`,
     `camera: ${scene.camera ?? 'wide shot'}`,
     `consistent art style: ${cast}`,
@@ -113,7 +121,7 @@ export async function visualAgent(
 
   for (let i = 0; i < plan.scenes.length; i++) {
     const scene = plan.scenes[i]!;
-    const prompt = buildScenePrompt(plan, scene, i);
+    const prompt = buildScenePrompt(plan, scene, i, input.channelConfig);
     const gen = await deps.generateImage({ prompt, size: IMAGE_SIZE });
     const ext = gen.mime === 'image/png' ? 'png' : 'jpg';
     const rel = `${scene.id}.${ext}`;

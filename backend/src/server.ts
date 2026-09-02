@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { getDB } from './db/database.js';
-import { contentRepo, jobRepo, approvalRepo, artifactRepo } from './db/repository.js';
+import { contentRepo, jobRepo, approvalRepo, artifactRepo, channelRepo } from './db/repository.js';
 import { Orchestrator } from './orchestrator/orchestrator.js';
 import { allRunners } from './agents/registry.js';
 import { computeAnalytics, type AnalyticsInput } from './agents/analytics.js';
@@ -77,6 +77,7 @@ function contentToApi(c: ReturnType<typeof contentRepo.list>[number]) {
     hook: c.hook,
     status: c.status,
     currentVersion: c.current_version,
+    channelId: c.channel_id,
     createdAt: c.created_at,
   };
 }
@@ -315,6 +316,65 @@ const routes: Route[] = [
   },
   {
     method: 'GET',
+    match: /^\/api\/channels$/,
+    handler(_m, _req, res) {
+      sendJson(res, 200, {
+        channels: channelRepo.list().map((c) => ({
+          id: c.id,
+          name: c.name,
+          config: c.config ? safeParse(c.config) : null,
+          createdAt: c.created_at,
+        })),
+      });
+    },
+  },
+  {
+    method: 'POST',
+    match: /^\/api\/channels$/,
+    async handler(_m, req, res) {
+      const body = await readJson(req);
+      const name = String(body.name ?? '').trim();
+      if (!name) return sendJson(res, 400, { error: 'name is required' });
+      const channel = channelRepo.list().find((c) => c.name.toLowerCase() === name.toLowerCase());
+      if (channel) return sendJson(res, 400, { error: `channel already exists: ${name}` });
+      const id = `channel_${Math.random().toString(36).slice(2, 10)}`;
+      const now = nowIso();
+      channelRepo.insert({
+        id,
+        name,
+        config: body.config ? JSON.stringify(body.config) : null,
+        created_at: now,
+        updated_at: now,
+      });
+      sendJson(res, 201, {
+        id,
+        name,
+        config: body.config ? body.config : null,
+        createdAt: now,
+      });
+    },
+  },
+  {
+    method: 'PUT',
+    match: /^\/api\/channels\/([^/]+)$/,
+    async handler(m, req, res) {
+      const id = m[1]!;
+      const existing = channelRepo.get(id);
+      if (!existing) return sendJson(res, 404, { error: 'channel not found' });
+      const body = await readJson(req);
+      const name = body.name === undefined ? existing.name : String(body.name).trim();
+      if (!name) return sendJson(res, 400, { error: 'name cannot be empty' });
+      const config = body.config === undefined ? existing.config : body.config !== null ? JSON.stringify(body.config) : null;
+      channelRepo.updateConfig(id, name, config);
+      sendJson(res, 200, {
+        id,
+        name,
+        config: config ? JSON.parse(config) : null,
+      });
+    },
+  },
+  {
+    method: 'GET',
     match: /^\/api\/content$/,
     handler(_m, _req, res) {
       const content = contentRepo.list().map((c) => {
@@ -354,10 +414,17 @@ const routes: Route[] = [
     match: /^\/api\/content$/,
     async handler(_m, req, res) {
       const body = await readJson(req);
-      const id = orchestrator.createContent({
-        topic: body.topic,
-        targetAge: body.targetAge,
-      });
+      const channelId = body.channelId ? String(body.channelId) : undefined;
+      if (channelId && !channelRepo.get(channelId)) {
+        return sendJson(res, 400, { error: `channel not found: ${channelId}` });
+      }
+      const id = orchestrator.createContent(
+        {
+          topic: body.topic,
+          targetAge: body.targetAge,
+        },
+        channelId,
+      );
       sendJson(res, 201, { id });
     },
   },
@@ -518,7 +585,14 @@ const routes: Route[] = [
           loadPipeline(),
         );
         if (status === 'APPROVED') {
-          await orchestrator.drain(loadPipeline());
+          // Advance the pipeline in the background instead of awaiting the full
+          // drain: a drain runs every chained LLM job and can take minutes (or
+          // stall on a hung gateway call), which would otherwise leave the
+          // approve HTTP request hanging and freeze the Control Center UI.
+          void orchestrator.drain(loadPipeline()).catch((e) => {
+            // eslint-disable-next-line no-console
+            console.error('[aicf] background drain after approval failed:', e);
+          });
         }
         sendJson(res, 200, { decided: true, status });
       } catch (e) {

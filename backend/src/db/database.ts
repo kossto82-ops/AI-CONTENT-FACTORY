@@ -18,6 +18,9 @@ export function getDB(): DB {
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
   migrate(db);
+  // Seeding is idempotent and runs on every startup so new/fresh DBs get the
+  // default channel and existing DBs are upgraded in place.
+  seedChannels(db);
   _db = db;
   return db;
 }
@@ -169,7 +172,64 @@ CREATE TABLE IF NOT EXISTS learning (
 );
 `,
   },
+  {
+    version: 4,
+    up: `
+CREATE TABLE IF NOT EXISTS channel (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,          -- e.g. "ToyMonster Club"
+  config        TEXT,                   -- JSON ChannelConfig (NULL = default config)
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+
+ALTER TABLE content ADD COLUMN channel_id TEXT;
+`,
+  },
 ];
+
+/** Insert the seeded default channel into an already-migrated DB (idempotent). */
+function seedChannels(db: DB): void {
+  const existing = db.prepare('SELECT id FROM channel WHERE id = ?').get('channel_toymonster') as
+    | { id: string }
+    | undefined;
+  if (existing) return;
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO channel (id, name, config, created_at, updated_at) VALUES (?,?,?,?,?)').run(
+    'channel_toymonster',
+    'ToyMonster Club',
+    JSON.stringify({
+      audience: { targetAge: '3-8', language: 'global', languageIndependent: true },
+      format: {
+        defaultDurationSec: 15,
+        structure: 'hook-caos-cta',
+        beats: [
+          { name: 'Hook', start: 0, end: 3, description: 'character finds a mysterious object / bright box / makes an absurd mistake' },
+          { name: 'Chaos', start: 3, end: 11, description: 'problem escalates with cartoon SFX (boing, pop, fast laughter)' },
+          { name: 'CTA', start: 11, end: 15, description: 'exaggerated reaction + perfect loop inviting rewatch' },
+        ],
+      },
+      visualStyle: {
+        style: '3D rendered ToyMonster toy cartoon',
+        characterDescription:
+          '3D rendered character, a cute ugly monster inspired by Labubu and vinyl art toys, fuzzy plush texture, oversized head, sharp cute mischievous smile, expressive big glossy eyes, soft studio lighting, vibrant colors, clean minimal pastel background, Pixar quality, 8k resolution, octane render, --ar 9:16',
+      },
+      rhythm: { postsPerDay: '2-3', pacingWordsPerSec: 2.8 },
+      promptOverrides: {
+        research:
+          "Targeting kids 3-8 worldwide with NO language barrier — retention comes from audio SFX and visual expressiveness, not narration. Each beat must be readable without words.",
+        script:
+          "Structure every Short as exactly three beats using cartoon SFX for pacing and visual gags that need no translation: Hook (0-3s: mysterious object / bright box / absurd mistake), Chaos (3-11s: escalation with boing/pop/laughter), CTA (11-15s: exaggerated reaction + perfect loop that invites rewatching).",
+        director:
+          "Character: cute ugly toy monster (Labubu-style). Keep the fuzzy plush texture, oversized head, mischievous smile and glossy eyes consistent in every shot. Minimal pastel background, vibrant colors.",
+        visual:
+          "Character: cute ugly toy monster, Labubu-inspired vinyl toy, fuzzy plush texture, oversized head, sharp mischievous smile, big glossy eyes, pastel background, Pixar quality, octane render, 8k.",
+      },
+    }),
+    now,
+    now,
+  );
+}
 
 export function migrate(db: DB): void {
   db.exec(`

@@ -87,6 +87,7 @@ export const qaChecklistSchema = z.object({
   coherence_ok: z.boolean().nullable(),
   appropriateness_ok: z.boolean().nullable(),
   metadata_complete: z.boolean().nullable(),
+  beat_structure_ok: z.boolean().nullable(),
 });
 export type QaChecklist = z.infer<typeof qaChecklistSchema>;
 
@@ -134,3 +135,78 @@ export type PublishPackage = z.infer<typeof publishPackageSchema>;
 
 /** Resolves a content thumbnail URI for the publish package (served by the asset route). */
 export type AssetUriResolver = (contentId: string) => string;
+
+/**
+ * Channel configuration (Decision: multi-channel). A channel is a first-class
+ * entity (table `channel`) that parameters the creative agents. Content
+ * references a channel by `channel_id`; a channel whose `config` is NULL or
+ * absent falls back to `DEFAULT_CHANNEL_CONFIG`. Because every field is data,
+ * duplicating a channel = copying its config JSON and changing name/character.
+ */
+export const channelBeatSchema = z.object({
+  name: z.string(), // e.g. "Hook"
+  start: z.number(), // seconds (inclusive)
+  end: z.number(), // seconds (exclusive)
+  description: z.string(), // what happens + hook/CTA guidance
+});
+export type ChannelBeat = z.infer<typeof channelBeatSchema>;
+
+export const channelConfigSchema = z.object({
+  audience: z
+    .object({
+      targetAge: z.string().default('4-7'), // e.g. "3-8"
+      language: z.string().default('global'),
+      languageIndependent: z.boolean().default(true), // retention via audio + visual, no language barrier
+    })
+    .default({ targetAge: '4-7', language: 'global', languageIndependent: true }),
+  format: z
+    .object({
+      defaultDurationSec: z.number().default(15), // script duration; 30 optional per content
+      structure: z.string().default('hook-caos-cta'),
+      beats: z.array(channelBeatSchema).default([
+        { name: 'Hook', start: 0, end: 3, description: 'character finds a mysterious object / bright box / makes an absurd mistake' },
+        { name: 'Chaos', start: 3, end: 11, description: 'problem escalates with cartoon SFX (boing, pop, fast laughter)' },
+        { name: 'CTA', start: 11, end: 15, description: 'exaggerated reaction + perfect loop inviting rewatch' },
+      ]),
+    })
+    .default({
+      defaultDurationSec: 15,
+      structure: 'hook-caos-cta',
+      beats: [
+        { name: 'Hook', start: 0, end: 3, description: 'mystery object / bright box / absurd mistake' },
+        { name: 'Chaos', start: 3, end: 11, description: 'escalation with cartoon SFX (boing, pop, laughter)' },
+        { name: 'CTA', start: 11, end: 15, description: 'exaggerated reaction + perfect loop' },
+      ],
+    }),
+  visualStyle: z
+    .object({
+      style: z.string().default("children's cartoon"),
+      characterDescription: z.string().default(''),
+    })
+    .default({ style: "children's cartoon", characterDescription: '' }),
+  rhythm: z
+    .object({
+      postsPerDay: z.string().default('2-3'),
+      pacingWordsPerSec: z.number().default(2.8),
+    })
+    .default({ postsPerDay: '2-3', pacingWordsPerSec: 2.8 }),
+  promptOverrides: z
+    .object({
+      research: z.string().default(''),
+      script: z.string().default(''),
+      director: z.string().default(''),
+      visual: z.string().default(''),
+    })
+    .default({ research: '', script: '', director: '', visual: '' }),
+});
+export type ChannelConfig = z.infer<typeof channelConfigSchema>;
+
+/** Fallback used when content has no channel or the channel has no config. */
+export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = channelConfigSchema.parse({});
+
+/** Per-agent prompt hint derived from a channel config (null-safe). */
+export function channelPromptOverride(cfg: ChannelConfig | undefined, agent: string): string {
+  const o = cfg?.promptOverrides;
+  if (!o) return '';
+  return o[agent as keyof typeof o] ?? '';
+}

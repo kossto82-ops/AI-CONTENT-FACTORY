@@ -1,14 +1,23 @@
 import { gatewayExecute } from '../gateway/gateway.js';
 import type { GatewayUsage } from '../gateway/types.js';
-import { scriptSchema, type Idea, type Script } from './contracts.js';
+import {
+  channelPromptOverride,
+  scriptSchema,
+  type ChannelBeat,
+  type ChannelConfig,
+  type Idea,
+  type Script,
+} from './contracts.js';
 
 /**
  * Story / Script Agent — receive an approved idea, produce a structured,
  * versionable script (concept, hook, structure, narration, dialogues, scenes,
- * ending, CTA).
+ * ending, CTA). Duration and beat structure come from the channel config when
+ * present (e.g. ToyMonster Club: 15s Hook/Caos/CTA), else default 30s.
  */
 export interface ScriptInput {
   idea: Idea;
+  channelConfig?: ChannelConfig;
 }
 
 export interface ScriptOutput {
@@ -18,9 +27,21 @@ export interface ScriptOutput {
   provider: string;
 }
 
+function beatDirective(beats?: ChannelBeat[]): string {
+  if (!beats || beats.length === 0) return '';
+  return (
+    '\nBeat structure (follow these time windows exactly, one scene per beat):' +
+    beats
+      .map((b, i) => `\n  Beat ${i + 1} [${b.name}] ${b.start}s-${b.end}s: ${b.description}`)
+      .join('')
+  );
+}
+
 export async function scriptAgent(input: ScriptInput): Promise<ScriptOutput> {
   const idea = input.idea;
-  const duration = 30;
+  const cfg = input.channelConfig;
+  const duration = cfg?.format.defaultDurationSec ?? 30;
+  const override = channelPromptOverride(cfg, 'script');
 
   const schemaHint =
     '{"title":"string","concept":"string","hook":"string","targetAge":"string","structure":"string",' +
@@ -41,7 +62,11 @@ export async function scriptAgent(input: ScriptInput): Promise<ScriptOutput> {
         content:
           `Write a ${duration}-second script based on this approved idea:\n` +
           `Title: ${idea.title}\nConcept: ${idea.concept}\nTarget age: ${idea.target_age}\n` +
-          `Format: ${idea.format}\nHook: ${idea.hook}\n\nBreak into 3-6 scenes. Include a CTA for follow/subscribe.`,
+          `Format: ${idea.format}\nHook: ${idea.hook}` +
+          `\n\nBreak into exactly ${(cfg?.format.beats?.length ?? 1) === 3 ? 3 : '3-6'} scenes.` +
+          beatDirective(cfg?.format.beats) +
+          (override ? `\nChannel directive: ${override}` : '') +
+          `\nInclude a CTA for follow/subscribe and ensure the final beat loops back to the start (perfect loop).`,
       },
     ],
     json: true,

@@ -1,19 +1,20 @@
 import { getDB, closeDB } from './db/database.js';
-import { contentRepo, jobRepo, approvalRepo } from './db/repository.js';
+import { contentRepo, jobRepo, approvalRepo, channelRepo } from './db/repository.js';
 import { Orchestrator } from './orchestrator/orchestrator.js';
 import { DEFAULT_PIPELINE } from './pipeline.js';
 
 /**
  * Brain-first CLI. Demonstrates the orchestration layer end-to-end without a UI.
  *
- *   new-content [--topic X] [--age Y]   create an Idea (content)
- *   start <contentId>                   materialize the first pipeline job
- *   run                                 drain runnable jobs (AUTO/SEMI up to gates)
- *   approvals                           list pending human approvals
- *   approve <approvalId> [note]         approve a gate (resumes pipeline)
- *   reject  <approvalId> [note]         reject a gate (halts branch)
- *   status [contentId]                  show content lifecycle + job ladder
- *   jobs                                list jobs
+ *   new-content [--topic X] [--age Y] [--channel <channelId>]  create an Idea (content)
+ *   channels                        list channels
+ *   start <contentId>               materialize the first pipeline job
+ *   run                             drain runnable jobs (AUTO/SEMI up to gates)
+ *   approvals                       list pending human approvals
+ *   approve <approvalId> [note]     approve a gate (resumes pipeline)
+ *   reject  <approvalId> [note]     reject a gate (halts branch)
+ *   status [contentId]              show content lifecycle + job ladder
+ *   jobs                            list jobs
  */
 
 const orchestrator = new Orchestrator();
@@ -57,8 +58,22 @@ async function main(argv: string[]): Promise<void> {
     case 'new-content': {
       const topic = argValue(argv, '--topic') ?? undefined;
       const age = argValue(argv, '--age') ?? undefined;
-      const id = orchestrator.createContent({ topic, targetAge: age });
-      log(`Created content: ${id}`);
+      const channelId = argValue(argv, '--channel') ?? undefined;
+      if (channelId && !channelRepo.get(channelId)) throw new Error(`Channel not found: ${channelId}`);
+      const id = orchestrator.createContent({ topic, targetAge: age }, channelId);
+      log(`Created content: ${id}${channelId ? ` (channel ${channelId})` : ''}`);
+      break;
+    }
+
+    case 'channels': {
+      const list = channelRepo.list();
+      if (!list.length) {
+        log('No channels.');
+        break;
+      }
+      for (const c of list) {
+        log(`${c.id.padEnd(24)} ${c.name}`);
+      }
       break;
     }
 
@@ -156,7 +171,8 @@ async function main(argv: string[]): Promise<void> {
     default:
       log(`
 Commands:
-  new-content [--topic X] [--age Y]   create an Idea (content)
+  new-content [--topic X] [--age Y] [--channel <id>]  create an Idea (content)
+  channels                            list channels
   start <contentId>                   materialize the first pipeline job
   run                                 drain runnable jobs
   approvals                           list pending approvals

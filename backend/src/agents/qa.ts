@@ -7,6 +7,8 @@ import type { GatewayUsage } from '../gateway/types.js';
 import {
   qaIssueSchema,
   qaVerdictSchema,
+  type ChannelBeat,
+  type ChannelConfig,
   type QaChecklist,
   type QaIssue,
   type QaReviewScope,
@@ -43,6 +45,8 @@ export interface QaInput {
   plan: ProductionPlan;
   scriptTitle?: string;
   contentId?: string;
+  /** Channel config — QA validates duration + beat structure against it. */
+  channelConfig?: ChannelConfig;
   /** Latest `video` artifact (FinalVideoManifest), if assembly ran. */
   video?: FinalVideoManifest | null;
   /** Latest `assets` manifest (per-scene stills), if visual ran. */
@@ -113,6 +117,7 @@ function emptyChecklist(): QaChecklist {
     coherence_ok: null,
     appropriateness_ok: null,
     metadata_complete: null,
+    beat_structure_ok: null,
   };
 }
 
@@ -140,7 +145,10 @@ interface TechnicalQa {
 }
 
 /** Checks that can be run even with no video artifact (plan-only review). */
-export function runPlanQa(plan: ProductionPlan): { issues: QaIssue[]; checklist: QaChecklist } {
+export function runPlanQa(
+  plan: ProductionPlan,
+  channelConfig?: ChannelConfig,
+): { issues: QaIssue[]; checklist: QaChecklist } {
   const issues: QaIssue[] = [];
   const checklist = emptyChecklist();
 
@@ -201,7 +209,74 @@ export function runPlanQa(plan: ProductionPlan): { issues: QaIssue[]; checklist:
     checklist.subtitles_present = true;
   }
 
+  // Channel-specific checks (drift-tolerant): duration should match the
+  // channel default (e.g. 15s), and the scene timeline should map onto the
+  // channel beat structure (e.g. Hook/Caos/CTA) when one is defined.
+  const cfg = channelConfig;
+  if (cfg) {
+    const defDur = cfg.format.defaultDurationSec;
+    if (defDur > 0) {
+      const drift = Math.abs(total - defDur) / defDur;
+      if (drift > 0.1) {
+        checklist.duration_ok = false;
+        issues.push(
+          issue(
+            'medium',
+            'duration',
+            `Plan total (${total}s) does not match the channel's ${defDur}s default (drift ${(drift * 100).toFixed(0)}%).`,
+            {
+              location: 'plan',
+              suggestedFix: 'Revise the plan via the Director to the channel default duration.',
+              autoFixable: true,
+            },
+          ),
+        );
+      } else {
+        checklist.duration_ok = true;
+      }
+    }
+
+    const beats = cfg.format.beats ?? [];
+    if (beats.length > 1 && scenes.length > 0) {
+      const ok = beatsMatchScenes(beats, scenes);
+      checklist.beat_structure_ok = ok;
+      if (!ok) {
+        issues.push(
+          issue(
+            'medium',
+            'structure',
+            `Plan does not map cleanly onto the channel's ${beats.length} beats (${beats
+              .map((b) => b.name)
+              .join('/')}).`,
+            {
+              location: 'plan',
+              suggestedFix: 'Revise the plan via the Director to follow the channel beat structure.',
+              autoFixable: true,
+            },
+          ),
+        );
+      } else {
+        checklist.beat_structure_ok = true;
+      }
+    }
+  }
+
   return { issues, checklist };
+}
+
+/**
+ * Beat-structure validation given plan data (scenes have durations but NO
+ * absolute offsets, so we validate what is actually derivable):
+ *   - scene count matches the number of channel beats (e.g. 3 beats -> 3 scenes)
+ *   - every scene has a positive duration
+ *   - total scene duration equals the last beat end (e.g. 15s)
+ */
+function beatsMatchScenes(beats: ChannelBeat[], scenes: ProductionPlan['scenes']): boolean {
+  if (scenes.length !== beats.length) return false;
+  const envEnd = Math.max(...beats.map((b) => b.end));
+  const total = scenes.reduce((a, s) => a + (Number(s.durationSeconds) || 0), 0);
+  if (scenes.some((s) => !(Number(s.durationSeconds) > 0))) return false;
+  return Math.abs(total - envEnd) <= 1; // 1s tolerance on integer-second scenes
 }
 
 /** Media-level checks against the assembled video + manifests (offline, deterministic). */
@@ -643,7 +718,7 @@ async function liveModelPasses(
 export async function qaAgent(input: QaInput, fs: QaFileSystem = defaultQaFileSystem): Promise<QaOutput> {
   const plan = input.plan;
 
-  const planQa = runPlanQa(plan);
+  const planQa = runPlanQa(plan, input.channelConfig);
   const mediaQa = runMediaQa(input, fs);
   const issues = [...planQa.issues, ...mediaQa.issues];
   const checklist: QaChecklist = { ...mediaQa.checklist };
