@@ -328,6 +328,36 @@ Each decision: decision, alternatives, reason, trade-offs. Nothing arbitrary.
 
 ---
 
+## D-18 — Analytics = deterministic internal KPIs (no gateway, no pipeline step)
+
+- **Decision**: the Phase 10 Analytics Agent aggregates **operational** signals
+  the system already records — per-agent cost/usage/runs (from `job` +
+  `execution`), QA verdicts (from `qa` artifacts: score, pass/reject, issue
+  categories), publish status (from `publish_package` artifacts), content-status
+  distribution, and mean end-to-end pipeline duration. It is a **pure,
+  deterministic function** (`computeAnalytics(input)` in
+  `backend/src/agents/analytics.ts`): the server owns the SQL reads and passes
+  raw aggregated rows in; the agent never touches the DB or the gateway.
+- **Alternatives**: (a) an LLM-written narrative report over the numbers —
+  rejected because there is no external engagement data (D-17 makes publishing
+  logical), so a "performance analysis" by a model would be invented signal, not
+  signal; (b) a dashboard-only quotient view — half; the agent shape is kept so
+  it can feed the Phase 11 Learning Agent as a first-class callable.
+- **Reason**: internal signals ARE the only real "performance" here; a
+  deterministic aggregator is honest, free, offline-testable, and idempotent.
+  Feeds Learning (Phase 11) without coupling to a live model.
+- **Trade-offs**: analytics is **not** a per-content pipeline step (it
+  aggregates across ALL contents), so it has no job, no artifact, no approval —
+  it appears in the agent registry (mode AUTOMATIC) and is served live by
+  `GET /api/analytics`. `stageFor`/`defaultArtifactKind` return `ANALYZED` /
+  `undefined` for it (unreachable paths, documented).
+- **Status**: IMPLEMENTED (Phase 10, `AICF-011`). 8 hermetic unit tests +
+  E2E over the real HTTP server: 10 seeded jobs → correct totals/cost/QA/publish/
+  pipeline KPIs.
+- **Reversibility**: high.
+
+---
+
 ## Environment findings feeding decisions
 
 - Running: **OmniRoute** at `http://127.0.0.1:20128` — task combos + 400+ models

@@ -156,8 +156,26 @@ Docker/Java/ffmpeg/DB). Docs: ARCHITECTURE.md, PRODUCT.md, DECISIONS.md.
   `SCHEDULED` (`scheduledAt` set); both gated by the `publication` approval and
   surfaced as `publish_package` v1. Publisher is deterministic (no gateway).
 
-## Phase 10 — Analytics
-- Analytics Agent: performance analysis, feed Learning Agent.
+## Phase 10 — Analytics (DONE, `AICF-011`; internal KPIs, deterministic no gateway)
+- Analytics Agent: aggregates **internal, operational signals** — there are no
+  external engagement metrics because publication is logical (D-17, no upload).
+  Produces a structured KPI set over the running system: per-agent cost/tokens/
+  runs, QA pass rate + average score + top issue categories, publish status
+  (PUBLISHED/SCHEDULED by target), content-status distribution, and mean
+  pipeline duration (content creation → last completed job).
+- Deterministic + pure (Decision D-18): `computeAnalytics(input)` derives KPIs
+  from raw aggregated rows; the server owns the SQL reads. **No gateway call,
+  no pipeline step** — analytics is cross-content, so it is NOT in
+  `DEFAULT_PIPELINE` and does not persist a per-content artifact (it feeds the
+  Learning Agent in Phase 11 as a callable aggregation, not a job).
+- New endpoint `GET /api/analytics` (raw jobs + `qa`/`publish_package`
+  artifacts → KPI payload).
+- Control Center: new **Analytics** tab (KPI stat cards: total jobs/cost/
+  tokens; per-agent grid; QA approve-rate + avg score + top issues; publish
+  breakdown; pipeline duration + status distribution).
+- E2E proven (fresh DB, real HTTP server on a test port): seeded 10 jobs +
+  qa/publish artifacts across 2 contents → `/api/analytics` returned correct
+  totals (€0.15, 50% approve, avgScore 0.94, 1 published, 255s avg pipeline).
 
 ## Phase 11 — Learning
 - Learning Agent: learn from results -> generate new ideas.

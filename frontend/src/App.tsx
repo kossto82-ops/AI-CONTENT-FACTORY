@@ -11,10 +11,11 @@ import {
   type PipelineStep,
   type QaChecklist,
   type PublishPackage,
+  type AnalyticsResult,
 } from './api';
 import { Badge, Btn, Card, SectionTitle, Stat, toneForStatus } from './ui';
 
-type Tab = 'dashboard' | 'agents' | 'content' | 'approvals' | 'pipeline';
+type Tab = 'dashboard' | 'analytics' | 'agents' | 'content' | 'approvals' | 'pipeline';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -24,24 +25,27 @@ export function App() {
   const [content, setContent] = useState<Content[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [d, a, c, ap, p] = await Promise.all([
+      const [d, a, c, ap, p, an] = await Promise.all([
         api.dashboard(),
         api.agents(),
         api.content(),
         api.approvals(),
         api.pipelines(),
+        api.analytics(),
       ]);
       setDash(d);
       setAgents(a.agents);
       setContent(c.content);
       setApprovals(ap.approvals);
       setPipeline(p.active);
+      setAnalytics(an);
       setApiOk(true);
       setError(null);
     } catch (e) {
@@ -100,6 +104,7 @@ export function App() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'analytics', label: 'Analytics' },
     { id: 'pipeline', label: 'Pipeline' },
     { id: 'agents', label: 'Agents' },
     { id: 'content', label: 'Content' },
@@ -145,6 +150,7 @@ export function App() {
           />
         )}
         {tab === 'agents' && <AgentsView agents={agents} />}
+        {tab === 'analytics' && <AnalyticsView analytics={analytics} />}
         {tab === 'pipeline' && (
           <PipelineView pipeline={pipeline} onSaveStep={saveStep} busy={busy} />
         )}
@@ -320,6 +326,129 @@ function PipelineFlow({ pendingApprovals }: { pendingApprovals: number }) {
       <span className="ml-3 text-xs text-slate-500">
         {pendingApprovals > 0 ? 'â¸ waiting for human approval' : 'Â· QA auto-runs Â· publish disabled (MVP)'}
       </span>
+    </div>
+  );
+}
+
+function AnalyticsRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-ink-700/50 py-1.5 text-sm">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-mono text-slate-200">{value}</span>
+    </div>
+  );
+}
+
+function AnalyticsView({ analytics }: { analytics: AnalyticsResult | null }) {
+  const a = analytics;
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <SectionTitle>Analytics</SectionTitle>
+        {a && (
+          <span className="font-mono text-[10px] text-slate-600 uppercase tracking-widest">
+            generated {a.generatedAt}
+          </span>
+        )}
+      </div>
+
+      {!a ? (
+        <p className="text-sm text-slate-500">No analytics yet.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <Stat label="Total jobs" value={a.totals.jobs.toLocaleString()} />
+            <Stat label="Total cost" value={`€${a.totals.costEur.toFixed(4)}`} />
+            <Stat label="Tokens in" value={a.totals.tokensIn.toLocaleString()} accent="text-sky-300" />
+            <Stat label="Tokens out" value={a.totals.tokensOut.toLocaleString()} accent="text-sky-300" />
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="p-4">
+              <SectionTitle>Per agent</SectionTitle>
+              <div className="mt-2 space-y-1">
+                {a.perAgent.length === 0 && <p className="text-sm text-slate-500">No agent runs yet.</p>}
+                {a.perAgent.map((ag) => (
+                  <div key={ag.type} className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700/50 py-1.5 text-sm">
+                    <span className="font-medium text-slate-200">{ag.name}</span>
+                    <span className="flex flex-wrap gap-2 font-mono text-[11px] text-slate-500">
+                      <span title="runs">{ag.runs}</span>
+                      <span className="text-emerald-400/80" title="completed">✓{ag.completed}</span>
+                      {ag.failed > 0 && <span className="text-red-400/80" title="failed">✕{ag.failed}</span>}
+                      <span className="text-slate-400">€{ag.costEur.toFixed(4)}</span>
+                      <span className="text-slate-500">{ag.tokensIn + ag.tokensOut} tok</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <SectionTitle>QA</SectionTitle>
+              <div className="mt-2">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <Stat label="Approve rate" value={`${a.qa.approveRate}%`} accent={a.qa.approveRate >= 70 ? 'text-emerald-300' : 'text-amber-300'} />
+                  <Stat label="Avg score" value={a.qa.avgScore.toFixed(2)} />
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="text-slate-500">{a.qa.total ? `${a.qa.approved} approved / ${a.qa.rejected} rejected` : 'No QA yet'}</span>
+                </div>
+                {a.qa.topIssueCategories.length > 0 && (
+                  <div className="mt-3">
+                    <SectionTitle>Top issue categories</SectionTitle>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {a.qa.topIssueCategories.map((t) => (
+                        <span key={t.category} className="rounded bg-red-500/10 px-2 py-0.5 font-mono text-[11px] text-red-400/90">
+                          {t.category} ×{t.count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="p-4">
+              <SectionTitle>Publish</SectionTitle>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                <Stat label="Published" value={a.publish.published.toString()} accent="text-emerald-300" />
+                <Stat label="Scheduled" value={a.publish.scheduled.toString()} accent="text-sky-300" />
+              </div>
+              {Object.keys(a.publish.byTarget).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {Object.entries(a.publish.byTarget).map(([t, n]) => (
+                    <span key={t} className="rounded bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] text-sky-400">
+                      {t} ×{n}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            <Card className="p-4">
+              <SectionTitle>Pipeline</SectionTitle>
+              <div className="mt-2">
+                <AnalyticsRow
+                  label="Avg duration"
+                  value={`${Math.floor(a.pipeline.avgPipelineDurationSec / 60)}m ${Math.round(a.pipeline.avgPipelineDurationSec % 60)}s`}
+                />
+                <AnalyticsRow label="Contents" value={String(a.pipeline.totalContent)} />
+              </div>
+              {Object.keys(a.pipeline.byStatus).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {Object.entries(a.pipeline.byStatus).map(([s, n]) => (
+                    <span key={s} className="rounded bg-ink-800 px-2 py-0.5 font-mono text-[11px] text-slate-300">
+                      {s} ×{n}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }

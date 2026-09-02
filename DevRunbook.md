@@ -61,7 +61,7 @@ npm run build        # vite build -> dist/
 
 ```bash
 cd backend
-npm test             # vitest run — 8 files, 70 tests (after Phase 9)
+npm test             # vitest run — 9 files, 78 tests (after Phase 10)
 npm test             # (run via `npm.cmd` on Windows PowerShell)
 ```
 
@@ -87,7 +87,10 @@ npm run dev
 
 - Backend: `GET http://127.0.0.1:8787/api/dashboard` -> 200 JSON with job
   counts. Also `GET /api/pipelines` shows the active 8-step pipeline
-  (…Assembly -> QA -> Publisher).
+  (…Assembly -> QA -> Publisher), and `GET /api/analytics` returns the
+  internal KPI set (cost/tokens per agent, QA pass rate, publish + content
+  status, mean pipeline duration) — analytic is cross-content, not a pipeline
+  step.
 - Frontend: open `http://127.0.0.1:5173` — header shows "API online" when the
   backend is reachable.
 - OmniRoute: `GET http://127.0.0.1:20128/v1/models` (200).
@@ -128,6 +131,7 @@ npm run dev
 | `OMNIROUTE_VIDEO_STUB=1` | stub | Use deterministic animated-GIF clips. **Live veo/seedance is UNPROVEN** (all 4 models time out; see Troubleshooting). Set `=0` to try live. |
 | `OMNIROUTE_QA_STUB=1` | stub | QA Agent runs deterministic checks only (technical + plan-consistency); model/vision rows show as un-checked (`null`). **Live vision UNPROVEN** — OmniRoute :20128 down; set `=0` to try live plan review + vision review. |
 | _(Publisher)_ | determinist | Phase 9 Publisher needs **no gateway and no flag** — it derives a `publish_package` (metadata) locally. Publication is logical (`LocalExport`), no upload. Scheduling = a `scheduledAt` field, no runner. |
+| _(Analytics)_ | determinist | Phase 10 Analytics needs **no gateway and no flag** — `GET /api/analytics` aggregates internal KPIs deterministically (`computeAnalytics`, pure function). Not a pipeline step. |
 | `OMNIROUTE_URL` | `http://127.0.0.1:20128` | Gateway base. |
 | `FACTORY_DB` | `./data/factory.db` | SQLite path (e.g. `./data/fase7-test.db` for a fresh E2E DB). |
 

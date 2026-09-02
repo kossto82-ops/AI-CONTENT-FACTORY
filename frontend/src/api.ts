@@ -101,6 +101,40 @@ export interface PublishPackage {
   version: number;
 }
 
+export interface AnalyticsResult {
+  generatedAt: string;
+  totals: { costEur: number; tokensIn: number; tokensOut: number; jobs: number };
+  perAgent: {
+    type: string;
+    name: string;
+    runs: number;
+    completed: number;
+    failed: number;
+    costEur: number;
+    tokensIn: number;
+    tokensOut: number;
+  }[];
+  qa: {
+    total: number;
+    approved: number;
+    rejected: number;
+    approveRate: number;
+    avgScore: number;
+    topIssueCategories: { category: string; count: number }[];
+  };
+  publish: {
+    total: number;
+    published: number;
+    scheduled: number;
+    byTarget: Record<string, number>;
+  };
+  pipeline: {
+    totalContent: number;
+    avgPipelineDurationSec: number;
+    byStatus: Record<string, number>;
+  };
+}
+
 export interface Content {
   id: string;
   title: string | null;
@@ -191,6 +225,7 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 export const api = {
   dashboard: () => req<Dashboard>('/api/dashboard'),
   agents: () => req<{ agents: Agent[] }>('/api/agents'),
+  analytics: () => req<AnalyticsResult>('/api/analytics'),
   content: () => req<{ content: Content[] }>('/api/content'),
   contentDetail: (id: string) =>
     req<{

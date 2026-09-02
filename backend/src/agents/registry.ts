@@ -7,6 +7,7 @@ import { visualAgent } from './visual.js';
 import { voiceAgent } from './voice.js';
 import { assemblyAgent } from './assembly.js';
 import { publisherAgent, type PublishInput } from './publisher.js';
+import { computeAnalytics, type AnalyticsInput } from './analytics.js';
 import type { Idea, ProductionPlan, Script } from './contracts.js';
 import type { AssetsManifest } from './visual.js';
 import type { VoiceManifest } from './voice.js';
@@ -20,7 +21,8 @@ export type AgentType =
   | 'voice'
   | 'assembly'
   | 'qa'
-  | 'publisher';
+  | 'publisher'
+  | 'analytics';
 
 /** Normalized result every agent returns for a Job. */
 export interface AgentRunResult {
@@ -130,6 +132,21 @@ const runners: Record<AgentType, AgentRunner> = {
       };
     },
   },
+  analytics: {
+    type: 'analytics',
+    name: 'Analytics Agent',
+    async run(input) {
+      const out = computeAnalytics(input as AnalyticsInput);
+      // Analytics is a global aggregation (not per-content), so it does NOT
+      // persist an artifact and does NOT enter the per-content pipeline.
+      return {
+        data: out,
+        usage: { tokensIn: 0, tokensOut: 0, requests: 0, costEur: 0 },
+        model: 'deterministic',
+        provider: 'local',
+      };
+    },
+  },
 };
 
 export type ScriptInput = Parameters<typeof scriptAgent>[0];
@@ -139,6 +156,7 @@ export type VoiceInput = Parameters<typeof voiceAgent>[0];
 export type AssemblyInput = Parameters<typeof assemblyAgent>[0];
 export type QaInput = Parameters<typeof qaAgent>[0];
 export type PublisherInput = PublishInput;
+export type AnalyticsInputType = AnalyticsInput;
 
 export function getRunner(type: AgentType): AgentRunner {
   const r = runners[type];

@@ -618,6 +618,11 @@ function stageFor(agent: AgentType): import('../domain/types.js').ContentStatus 
       return 'QA';
     case 'publisher':
       return 'APPROVED_FOR_PUBLISH';
+    // Analytics is a cross-content aggregation (Decision D-18), not a
+    // per-content pipeline step; the terminal ANALYZED state reflects that the
+    // content has been analysed by the system.
+    case 'analytics':
+      return 'ANALYZED';
   }
 }
 
@@ -640,6 +645,9 @@ function defaultArtifactKind(agent: AgentType): string | undefined {
       return 'qa';
     case 'publisher':
       return 'publish_package';
+    // No per-content artifact for the global Analytics Agent.
+    case 'analytics':
+      return undefined;
   }
 }
 
@@ -661,6 +669,9 @@ function defaultApprovalKind(agent: AgentType): string {
     case 'qa':
       return 'video';
     case 'publisher':
+      return 'publication';
+    // Analytics is never a gated pipeline step; this path is unreachable.
+    case 'analytics':
       return 'publication';
   }
 }

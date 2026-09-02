@@ -7,6 +7,7 @@ import { getDB } from './db/database.js';
 import { contentRepo, jobRepo, approvalRepo, artifactRepo } from './db/repository.js';
 import { Orchestrator } from './orchestrator/orchestrator.js';
 import { allRunners } from './agents/registry.js';
+import { computeAnalytics, type AnalyticsInput } from './agents/analytics.js';
 import type { AgentMode } from './domain/types.js';
 import {
   listPipelines,
@@ -165,6 +166,46 @@ const routes: Route[] = [
         };
       });
       sendJson(res, 200, { agents });
+    },
+  },
+  {
+    method: 'GET',
+    match: /^\/api\/analytics$/,
+    handler(_m, _req, res) {
+      const jobs = (getDB().prepare('SELECT * FROM job').all() as any[]).map((j) => ({
+        content_id: j.content_id,
+        type: j.type,
+        status: j.status,
+        cost_eur: j.cost_eur || 0,
+        tokens_in: j.tokens_in || 0,
+        tokens_out: j.tokens_out || 0,
+        created_at: j.created_at,
+        completed_at: j.completed_at,
+      }));
+      const contents = contentRepo.list().map((c) => ({
+        id: c.id,
+        status: c.status,
+        created_at: c.created_at,
+      }));
+      const artifactRows = getDB()
+        .prepare("SELECT kind, payload FROM artifact WHERE kind IN ('qa','publish_package')")
+        .all() as { kind: string; payload: string }[];
+      const qaVerdicts = artifactRows
+        .filter((a) => a.kind === 'qa')
+        .map((a) => safeParse(a.payload) as { status?: string; score?: number; issues?: { severity: string; category: string }[] })
+        .filter((v) => v.status)
+        .map((v) => ({
+          status: v.status as 'approved' | 'rejected',
+          score: v.score ?? 0,
+          issues: (v.issues ?? []).map((i) => ({ severity: i.severity, category: i.category })),
+        }));
+      const publishPackages = artifactRows
+        .filter((a) => a.kind === 'publish_package')
+        .map((a) => safeParse(a.payload) as { status?: string; target?: string })
+        .filter((p) => p.status)
+        .map((p) => ({ status: p.status as 'SCHEDULED' | 'PUBLISHED', target: p.target ?? 'LocalExport' }));
+      const input: AnalyticsInput = { jobs, qaVerdicts, publishPackages, contents };
+      sendJson(res, 200, computeAnalytics(input));
     },
   },
   {
@@ -447,6 +488,7 @@ function agentDefaultMode(type: string): AgentMode {
     case 'voice':
     case 'assembly':
     case 'publisher':
+    case 'analytics':
       return 'AUTOMATIC';
     default:
       return 'SEMI_AUTOMATIC';
