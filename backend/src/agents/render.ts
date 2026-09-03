@@ -151,42 +151,58 @@ export function buildCameraMove(
 
   // Alternate a cinematic move per scene index. zoompan runs per output frame:
   // `on` is the 0-based output frame, x/y are fractions of the croppable space.
+  // Moves are deliberately pronounced so a still finally feels like footage.
   switch (index % 5) {
     case 0:
-      // Slow zoom-in (classic Ken Burns), eased.
-      return base + `zoompan=z='min(zoom+0.0018,1.18)':d=1:fps=${fps}:s=${outW}x${outH},`;
+      // Slow zoom-in (classic Ken Burns), eased, deeper than before.
+      return base + `zoompan=z='min(zoom+0.003,1.35)':d=1:fps=${fps}:s=${outW}x${outH},`;
     case 1:
-      // Zoom-out (start slightly large, drift to 1.0).
+      // Zoom-out (start enlarged, drift down to 1.0).
       return (
         base +
-        `zoompan=z='if(lte(zoom,1.0),1.18,max(zoom-0.0015,1.0))':d=1:fps=${fps}:s=${outW}x${outH},`
+        `zoompan=z='if(lte(zoom,1.0),1.35,max(zoom-0.0025,1.0))':d=1:fps=${fps}:s=${outW}x${outH},`
       );
     case 2:
-      // Pan up-left: eased upward + slight right drift.
+      // Pan up-left: eased upward with a hint of horizontal drift.
       return (
         base +
-        `zoompan=z='1.12':x='(iw-iw/zoom)*${0.35}*on/${n}':y='(ih-ih/zoom)*(1-on/${n})':d=1:fps=${fps}:s=${outW}x${outH},`
+        `zoompan=z='1.18':x='(iw-iw/zoom)*${0.45}*on/${n}':y='(ih-ih/zoom)*(1-on/${n})':d=1:fps=${fps}:s=${outW}x${outH},`
       );
     case 3:
       // Pan down-right: settle downward.
       return (
         base +
-        `zoompan=z='1.12':x='(iw-iw/zoom)*${0.2}*on/${n}':y='(ih-ih/zoom)*on/${n}':d=1:fps=${fps}:s=${outW}x${outH},`
+        `zoompan=z='1.18':x='(iw-iw/zoom)*${0.28}*on/${n}':y='(ih-ih/zoom)*on/${n}':d=1:fps=${fps}:s=${outW}x${outH},`
       );
     default:
       // Pan right across the frame.
       return (
         base +
-        `zoompan=z='1.12':x='(iw-iw/zoom)*on/${n}':y='(ih-ih/zoom)*0':d=1:fps=${fps}:s=${outW}x${outH},`
+        `zoompan=z='1.18':x='(iw-iw/zoom)*on/${n}':y='(ih-ih/zoom)*0':d=1:fps=${fps}:s=${outW}x${outH},`
       );
   }
 }
 
 /**
+ * Soft fade-in/out duration (s) applied per scene segment to ease the cuts
+ * between stills. Chosen small enough that any realistic scene stays longer
+ * than a fade. This is a fade, NOT an xfade: in this ffmpeg build `xfade`
+ * combined with any audio stream fails to parse ("No such filter: ''"), so a
+ * per-scene fade keeps the concat path (which works with audio) intact.
+ */
+export const RENDER_FADE_S = 0.4;
+
+/**
  * Build the ffmpeg argument list that produces `final.mp4` for the given
  * scenes. Pure (no I/O) so it is directly unit-testable.
  */
-export function buildRenderArgs(input: RenderInput): { args: string[]; inputs: string[]; output: string } {
+export function buildRenderArgs(input: RenderInput): {
+  args: string[];
+  inputs: string[];
+  output: string;
+  /** Effective output duration (scene sum minus crossfade overlaps). */
+  durationSec: number;
+} {
   const contentDir = input.assetsDir ?? join(ASSETS_ROOT, input.contentId);
   const outputDir = input.renderDir ?? defaultRenderDir(input.contentId);
   const scenes = input.scenes;
@@ -227,33 +243,43 @@ export function buildRenderArgs(input: RenderInput): { args: string[]; inputs: s
   // ---- filter_complex ----
   const fc: string[] = [];
   const vOuts: string[] = [];
-
+  const dur = scenes.map(sceneDurationSec);
+  // Soft fade-in/out on each scene segment so cuts between stills are
+  // eased. This reads as a gentle crossfade but stays concat-compatible: in
+  // this ffmpeg build, `xfade` combined with any audio stream fails to parse
+  // ("No such filter: ''"), so we avoid xfade and ease with fades instead.
   for (let i = 0; i < n; i++) {
+    const fadeIn = `fade=t=in:st=0:d=${RENDER_FADE_S}`;
+    const fadeOut = `fade=t=out:st=${Math.max(0, dur[i]! - RENDER_FADE_S).toFixed(3)}:d=${RENDER_FADE_S}`;
     if (clipPaths[i]) {
       // Real IA clip: normalize to 9:16 + yuv420p; keep the clip's own motion.
       const v =
         `scale=${RENDER_RESOLUTION_W}:${RENDER_RESOLUTION_H}:force_original_aspect_ratio=increase:force_divisible_by=2,` +
         `crop=${RENDER_RESOLUTION_W}:${RENDER_RESOLUTION_H},` +
-        `format=yuv420p,setsar=1,fps=${RENDER_FPS}`;
+        `format=yuv420p,setsar=1,fps=${RENDER_FPS},` +
+        `${fadeIn},${fadeOut}`;
       fc.push(`[${i}:v]${v}[v${i}]`);
     } else {
       const v =
-        buildCameraMove(i, RENDER_RESOLUTION_W, RENDER_RESOLUTION_H, RENDER_FPS, sceneDurationSec(scenes[i]!)) +
-        `format=yuv420p,setsar=1`;
+        buildCameraMove(i, RENDER_RESOLUTION_W, RENDER_RESOLUTION_H, RENDER_FPS, dur[i]!) +
+        `format=yuv420p,setsar=1,fps=${RENDER_FPS},` +
+        `${fadeIn},${fadeOut}`;
       fc.push(`[${i}:v]${v}[v${i}]`);
     }
     vOuts.push(`[v${i}]`);
   }
 
-  // Concat all video segments -> [outv].
+  // Concat the per-scene segments (each already soft-faded) into [outv].
   fc.push(`${vOuts.join('')}concat=n=${n}:v=1:a=0[outv]`);
+  const totalDur = dur.reduce((a, b) => a + b, 0);
 
-  // Audio: each scene's narration, delayed to its start, resampled to stereo.
+  // Audio: each scene's narration, delayed to its scene start, resampled to
+  // stereo, then mixed.
   const activeAudio: number[] = [];
   let audioIndex = n; // video inputs occupy 0..n-1
   for (let i = 0; i < n; i++) {
     if (!audioPaths[i]) continue; // skip missing narration
-    const ms = Math.round(scenes[i]!.startSec * 1000);
+    const ms = Math.max(0, Math.round((scenes[i]!.startSec ?? 0) * 1000));
     fc.push(
       `[${audioIndex}:a]aresample=48000,aformat=channel_layouts=stereo,` +
         `adelay=${ms}|${ms}[a${i}]`,
@@ -265,9 +291,8 @@ export function buildRenderArgs(input: RenderInput): { args: string[]; inputs: s
     // No narration at all: silent track for the full duration.
     // anullsrc has no `duration` option and emits an endless stream, so clamp
     // it with atrim=end=<total> (anullsrc+duration=... is rejected by ffmpeg).
-    const total = scenes.reduce((t, s) => t + sceneDurationSec(s), 0);
     fc.push(`anullsrc=channel_layout=stereo:sample_rate=48000[silent]`);
-    fc.push(`[silent]atrim=end=${total.toFixed(3)}[outa]`);
+    fc.push(`[silent]atrim=end=${totalDur.toFixed(3)}[outa]`);
   } else {
     const mixInputs = activeAudio.map((i) => `[a${i}]`).join('');
     fc.push(`${mixInputs}amix=inputs=${activeAudio.length}:normalize=0:dropout_transition=0[outa]`);
@@ -280,7 +305,7 @@ export function buildRenderArgs(input: RenderInput): { args: string[]; inputs: s
   args.push('-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart');
   args.push(output);
 
-  return { args, inputs, output };
+  return { args, inputs, output, durationSec: totalDur };
 }
 
 /**
@@ -291,7 +316,7 @@ export async function renderAgent(
   input: RenderInput,
   runFfmpeg: FfmpegRunner = defaultFfmpegRunner,
 ): Promise<RenderResult> {
-  const { args, output } = buildRenderArgs(input);
+  const { args, output, durationSec } = buildRenderArgs(input);
 
   const res = await runFfmpeg(args);
   if (res.code !== 0) {
@@ -301,14 +326,13 @@ export async function renderAgent(
   }
   if (!existsSync(output)) throw new Error('ffmpeg exited 0 but produced no final.mp4');
 
-  const duration = input.scenes.reduce((t, s) => t + sceneDurationSec(s), 0);
   return {
     contentId: input.contentId,
     file: 'final.mp4',
     relativePath: `assembly/final.mp4`,
     resolution: `${RENDER_RESOLUTION_W}x${RENDER_RESOLUTION_H}`,
     fps: RENDER_FPS,
-    durationSec: Math.round(duration * 10) / 10,
+    durationSec: Math.round(durationSec * 10) / 10,
     mime: RENDER_MIME,
     model: 'ffmpeg',
     provider: config.ffmpeg.path,

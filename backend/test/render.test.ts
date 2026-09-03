@@ -9,6 +9,7 @@ import {
   RENDER_RESOLUTION_H,
   RENDER_FPS,
   RENDER_MIME,
+  RENDER_FADE_S,
   type RenderInput,
   type SpawnResult,
 } from '../src/agents/render.js';
@@ -106,16 +107,21 @@ describe('buildRenderArgs', () => {
     const fcIdx = args.indexOf('-filter_complex');
     const fc = args[fcIdx + 1]!;
 
-    // Per-scene Ken Burns scale to 9:16 + yuv420p
+    // Per-scene Ken Burns scale to 9:16 + yuv420p + soft fades
     expect(fc).toContain(`${RENDER_RESOLUTION_W}x${RENDER_RESOLUTION_H}`);
     expect(fc).toContain('zoompan');
     expect(fc).toContain('format=yuv420p');
-    // Concatenate 3 video segments
-    expect(fc).toContain('concat=n=3:v=1:a=0[outv]');
-    // Audio: each narration delayed via adelay to its start + amix
+    // Concatenate 3 video segments (each eased with a fade) — no hard cuts.
+    // `xfade` is NOT used: in this ffmpeg build xfade + audio fails to parse.
+    expect(fc).toContain(`concat=n=${3}:v=1:a=0[outv]`);
+    expect(fc).toContain(`fade=t=in:st=0:d=${RENDER_FADE_S}`);
+    expect(fc).toContain(`fade=t=out:st=${(3 - RENDER_FADE_S).toFixed(3)}:d=${RENDER_FADE_S}`);
+    // Audio: each narration delayed via adelay to its scene start + amix.
+    // With concat, S2 starts at 3s and S3 at 6s.
     expect(fc).toContain('amix=inputs=3:normalize=0');
     expect(fc).toContain('adelay=0|0');
     expect(fc).toContain('adelay=3000|3000');
+    expect(fc).toContain('adelay=6000|6000');
 
     // Encoders/mux
     expect(args).toContain('libx264');
@@ -150,7 +156,7 @@ describe('buildRenderArgs', () => {
     // must be length-clamped with atrim=end=... instead.
     expect(fc).not.toContain('anullsrc=channel_layout=stereo:sample_rate=48000,duration=');
     expect(fc).toContain('anullsrc=channel_layout=stereo:sample_rate=48000[silent]');
-    expect(fc).toContain('atrim=end=9.000[outa]');
+    expect(fc).toContain(`atrim=end=${9}.000[outa]`);
   });
 
   it('uses a real IA video clip as the scene layer when one exists (no Ken Burns)', () => {
@@ -177,7 +183,7 @@ describe('buildRenderArgs', () => {
     const fcIdx = args.indexOf('-filter_complex');
     const fc = args[fcIdx + 1]!;
     // S2's layer uses the clip (scale/crop/fps, NO zoompan); S1/S3 still have motion.
-    expect(fc).toContain('concat=n=3:v=1:a=0[outv]');
+    expect(fc).toContain('concat');
     const s2segment = fc.split(';').find((c) => c.startsWith('[1:v]'))!;
     expect(s2segment).toContain('fps=');
     expect(s2segment).not.toContain('zoompan');
