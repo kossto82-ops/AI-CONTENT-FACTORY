@@ -152,7 +152,15 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
         scenes?: { sceneId: string; file: string; mime?: string; durationSeconds?: number }[];
       };
       const assemblyManifest = safeJson(videoArt.payload) as {
-        scenes?: { sceneId: string; visualFile?: string; voiceFile?: string; startSec?: number; endSec?: number }[];
+        scenes?: {
+          sceneId: string;
+          visualFile?: string;
+          voiceFile?: string;
+          clipFile?: string;
+          clipMime?: string;
+          startSec?: number;
+          endSec?: number;
+        }[];
       } | null;
       // Render per-scene refs come from the assembly manifest (authoritative
       // timings + file refs); fall back to the plan timings if absent.
@@ -161,13 +169,15 @@ function buildInput(agent: AgentType, content: Awaited<ReturnType<typeof content
         const dur = Math.max(0.4, (as.endSec ?? 0) - (as.startSec ?? 0));
         const asset = buildInput.find((x) => x.sceneId === as.sceneId);
         const vo = (voice.scenes ?? []).find((x) => x.sceneId === as.sceneId);
-        return {
-          sceneId: as.sceneId,
-          visualFile: as.visualFile ?? asset?.file ?? `${as.sceneId}.png`,
-          voiceFile: as.voiceFile ?? vo?.file ?? `${as.sceneId}.wav`,
-          startSec: as.startSec ?? 0,
-          endSec: as.endSec ?? dur,
-        };
+return {
+            sceneId: as.sceneId,
+            visualFile: as.visualFile ?? asset?.file ?? `${as.sceneId}.png`,
+            voiceFile: as.voiceFile ?? vo?.file ?? `${as.sceneId}.wav`,
+            clipFile: as.clipFile ?? undefined,
+            clipMime: as.clipMime ?? undefined,
+            startSec: as.startSec ?? 0,
+            endSec: as.endSec ?? dur,
+          };
       });
       return { plan: safeJson(planArt.payload), contentId: content.id, scenes, assemblyManifest };
     }

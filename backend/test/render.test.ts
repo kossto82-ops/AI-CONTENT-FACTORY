@@ -146,6 +146,46 @@ describe('buildRenderArgs', () => {
     const fcIdx = args.indexOf('-filter_complex');
     const fc = args[fcIdx + 1]!;
     expect(fc).toContain('anullsrc');
+    // anullsrc has no `duration` option (ffmpeg rejects it); the silent track
+    // must be length-clamped with atrim=end=... instead.
+    expect(fc).not.toContain('anullsrc=channel_layout=stereo:sample_rate=48000,duration=');
+    expect(fc).toContain('anullsrc=channel_layout=stereo:sample_rate=48000[silent]');
+    expect(fc).toContain('atrim=end=9.000[outa]');
+  });
+
+  it('uses a real IA video clip as the scene layer when one exists (no Ken Burns)', () => {
+    const dir = tempDir();
+    scaffoldAssets(dir);
+    const input = makeInput(dir);
+    // S2 has a real MP4 clip in assembly/; S1/S3 only stills.
+    mkdirSync(join(dir, 'assembly'), { recursive: true });
+    writeFileSync(join(dir, 'assembly', 'S2.mp4'), Buffer.from('FAKE MP4'));
+    input.scenes = [
+      { sceneId: 'S1', visualFile: 'S1.jpg', voiceFile: 'S1.wav', startSec: 0, endSec: 3 },
+      {
+        sceneId: 'S2',
+        visualFile: 'S2.jpg',
+        voiceFile: 'S2.wav',
+        clipFile: 'S2.mp4',
+        clipMime: 'video/mp4',
+        startSec: 3,
+        endSec: 6,
+      },
+      { sceneId: 'S3', visualFile: 'S3.jpg', voiceFile: 'S3.wav', startSec: 6, endSec: 9 },
+    ];
+    const { args } = buildRenderArgs(input);
+    const fcIdx = args.indexOf('-filter_complex');
+    const fc = args[fcIdx + 1]!;
+    // S2's layer uses the clip (scale/crop/fps, NO zoompan); S1/S3 still have motion.
+    expect(fc).toContain('concat=n=3:v=1:a=0[outv]');
+    const s2segment = fc.split(';').find((c) => c.startsWith('[1:v]'))!;
+    expect(s2segment).toContain('fps=');
+    expect(s2segment).not.toContain('zoompan');
+    // The clip input was added WITHOUT -loop (a still would use -loop 1).
+    const iLoopCount = args.filter((a, i) => a === '-loop' && args[i + 1] === '1').length;
+    expect(iLoopCount).toBe(2); // S1 + S3 stills only
+    // 3 video inputs (2 stills + 1 clip) + 3 narration wavs = 6 `-i`.
+    expect(args.filter((a) => a === '-i').length).toBe(6);
   });
 });
 

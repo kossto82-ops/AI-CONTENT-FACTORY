@@ -45,6 +45,14 @@ export interface RenderSceneInput {
   voiceFile: string;
   startSec: number;
   endSec: number;
+  /**
+   * Optional real video clip (from the assembly manifest, e.g. `scene.mp4` /
+   * `scene.webm`). When present AND a real non-GIF video, its motion is used as
+   * the scene's video layer instead of a Ken Burns pan over the still image.
+   * GIF clips / no clip fall back to cinematic motion on the still.
+   */
+  clipFile?: string;
+  clipMime?: string;
 }
 
 export interface RenderInput {
@@ -112,12 +120,66 @@ function sceneDurationSec(s: RenderSceneInput): number {
  * (the manifest stores bare `file` names, but voice WAVs are written under
  * `audio/`). Returns the first candidate that exists, else null.
  */
-function resolveAssetPath(contentDir: string, file: string, subdirs: string[]): string | null {
+function resolveAssetPath(contentDir: string, file: string | null | undefined, subdirs: string[]): string | null {
+  if (!file) return null;
   const candidates = [join(contentDir, file), ...subdirs.map((d) => join(contentDir, d, file))];
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
   return null;
+}
+
+/**
+ * Build the video layer filter chain for a still-image scene: scale-to-fill
+ * 9:16, then a CINEMATIC camera move chosen per-scene (alternating zoom-in /
+ * zoom-out / pan-up / pan-down / pan-right with eased velocity) so the edit
+ * never looks like a static slide with one identical slow zoom.
+ *
+ * Returns the filter string that maps `[i:v] -> [v{i}]`.
+ */
+export function buildCameraMove(
+  index: number,
+  outW: number,
+  outH: number,
+  fps: number,
+  durationSec: number,
+): string {
+  const base =
+    `scale=${outW}:${outH}:force_original_aspect_ratio=increase:force_divisible_by=2,` +
+    `crop=${outW}:${outH},`;
+  const n = Math.max(1, Math.round(durationSec * fps));
+
+  // Alternate a cinematic move per scene index. zoompan runs per output frame:
+  // `on` is the 0-based output frame, x/y are fractions of the croppable space.
+  switch (index % 5) {
+    case 0:
+      // Slow zoom-in (classic Ken Burns), eased.
+      return base + `zoompan=z='min(zoom+0.0018,1.18)':d=1:fps=${fps}:s=${outW}x${outH},`;
+    case 1:
+      // Zoom-out (start slightly large, drift to 1.0).
+      return (
+        base +
+        `zoompan=z='if(lte(zoom,1.0),1.18,max(zoom-0.0015,1.0))':d=1:fps=${fps}:s=${outW}x${outH},`
+      );
+    case 2:
+      // Pan up-left: eased upward + slight right drift.
+      return (
+        base +
+        `zoompan=z='1.12':x='(iw-iw/zoom)*${0.35}*on/${n}':y='(ih-ih/zoom)*(1-on/${n})':d=1:fps=${fps}:s=${outW}x${outH},`
+      );
+    case 3:
+      // Pan down-right: settle downward.
+      return (
+        base +
+        `zoompan=z='1.12':x='(iw-iw/zoom)*${0.2}*on/${n}':y='(ih-ih/zoom)*on/${n}':d=1:fps=${fps}:s=${outW}x${outH},`
+      );
+    default:
+      // Pan right across the frame.
+      return (
+        base +
+        `zoompan=z='1.12':x='(iw-iw/zoom)*on/${n}':y='(ih-ih/zoom)*0':d=1:fps=${fps}:s=${outW}x${outH},`
+      );
+  }
 }
 
 /**
@@ -135,12 +197,22 @@ export function buildRenderArgs(input: RenderInput): { args: string[]; inputs: s
   const args = ['-y'];
   const inputs: string[] = [];
 
-  // Video inputs: one looping still per scene, clipped to its duration.
+  // Video inputs: one per scene — a real IA clip when available, else a
+  // looping still. `-i` ordering stays aligned with scene index 0..n-1.
+  const clipPaths: (string | null)[] = [];
   for (const s of scenes) {
-    const img = resolveAssetPath(contentDir, s.visualFile, ['images', 'visual']);
-    if (!img) throw new Error(`render input image missing: ${s.visualFile}`);
-    args.push('-loop', '1', '-t', sceneDurationSec(s).toFixed(3), '-i', img);
-    inputs.push(img);
+    const clip = resolveAssetPath(contentDir, s.clipFile ?? '', ['assembly']);
+    if (s.clipMime && /^video\/(mp4|webm|quicktime)$/.test(s.clipMime) && clip) {
+      args.push('-t', sceneDurationSec(s).toFixed(3), '-i', clip);
+      clipPaths.push(clip);
+      inputs.push(clip);
+    } else {
+      const img = resolveAssetPath(contentDir, s.visualFile, ['images', 'visual']);
+      if (!img) throw new Error(`render input image missing: ${s.visualFile}`);
+      args.push('-loop', '1', '-t', sceneDurationSec(s).toFixed(3), '-i', img);
+      clipPaths.push(null);
+      inputs.push(img);
+    }
   }
   // Audio inputs: narration wav per scene (written under audio/ by Voice Agent).
   const audioPaths: (string | null)[] = [];
@@ -157,17 +229,23 @@ export function buildRenderArgs(input: RenderInput): { args: string[]; inputs: s
   const vOuts: string[] = [];
 
   for (let i = 0; i < n; i++) {
-    // Scale to fill 9:16, then a slow Ken Burns zoom-drift so the still is not
-    // dead static. format=yuv420p is required for H.264 / YouTube compatibility.
-    const v = `scale=${RENDER_RESOLUTION_W}:${RENDER_RESOLUTION_H}:force_original_aspect_ratio=increase:force_divisible_by=2,` +
-      `crop=${RENDER_RESOLUTION_W}:${RENDER_RESOLUTION_H},` +
-      `zoompan=z='min(zoom+0.0008,1.2)':d=1:fps=${RENDER_FPS}:s=${RENDER_RESOLUTION_W}x${RENDER_RESOLUTION_H},` +
-      `format=yuv420p,setsar=1`;
-    fc.push(`[${i}:v]${v}[v${i}]`);
+    if (clipPaths[i]) {
+      // Real IA clip: normalize to 9:16 + yuv420p; keep the clip's own motion.
+      const v =
+        `scale=${RENDER_RESOLUTION_W}:${RENDER_RESOLUTION_H}:force_original_aspect_ratio=increase:force_divisible_by=2,` +
+        `crop=${RENDER_RESOLUTION_W}:${RENDER_RESOLUTION_H},` +
+        `format=yuv420p,setsar=1,fps=${RENDER_FPS}`;
+      fc.push(`[${i}:v]${v}[v${i}]`);
+    } else {
+      const v =
+        buildCameraMove(i, RENDER_RESOLUTION_W, RENDER_RESOLUTION_H, RENDER_FPS, sceneDurationSec(scenes[i]!)) +
+        `format=yuv420p,setsar=1`;
+      fc.push(`[${i}:v]${v}[v${i}]`);
+    }
     vOuts.push(`[v${i}]`);
   }
 
-  // Concat all video segments -> [vout].
+  // Concat all video segments -> [outv].
   fc.push(`${vOuts.join('')}concat=n=${n}:v=1:a=0[outv]`);
 
   // Audio: each scene's narration, delayed to its start, resampled to stereo.
@@ -185,9 +263,11 @@ export function buildRenderArgs(input: RenderInput): { args: string[]; inputs: s
   }
   if (activeAudio.length === 0) {
     // No narration at all: silent track for the full duration.
+    // anullsrc has no `duration` option and emits an endless stream, so clamp
+    // it with atrim=end=<total> (anullsrc+duration=... is rejected by ffmpeg).
     const total = scenes.reduce((t, s) => t + sceneDurationSec(s), 0);
-    fc.push(`anullsrc=channel_layout=stereo:sample_rate=48000,duration=${total.toFixed(3)}[silent]`);
-    fc.push(`[silent]atrim=0:${total.toFixed(3)}[outa]`);
+    fc.push(`anullsrc=channel_layout=stereo:sample_rate=48000[silent]`);
+    fc.push(`[silent]atrim=end=${total.toFixed(3)}[outa]`);
   } else {
     const mixInputs = activeAudio.map((i) => `[a${i}]`).join('');
     fc.push(`${mixInputs}amix=inputs=${activeAudio.length}:normalize=0:dropout_transition=0[outa]`);
