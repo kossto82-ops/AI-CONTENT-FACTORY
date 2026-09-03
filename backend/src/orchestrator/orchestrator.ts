@@ -471,6 +471,13 @@ export class Orchestrator {
     });
 
     if (opts.status === 'APPROVED' && approval.content_id) {
+      // Approving the plan work is the completion of that job — it must leave
+      // WAITING_APPROVAL or the Control Center keeps showing it as a pending
+      // approval forever, even though the pipeline already advanced.
+      if (job && job.status === 'WAITING_APPROVAL') {
+        transitionJob(job, 'COMPLETED');
+        this.log(job, `Approved at approval gate — ${job.type} job COMPLETED`);
+      }
       // Do NOT advance content here — content advancement happens when each
       // step completes (in afterCompletion / createNextStepIfAuto). Approval
       // just unblocks the pipeline.

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { loadPipeline, updateStepDefinition } from '../src/pipelineStore.js';
 import { DEFAULT_PIPELINE } from '../src/pipeline.js';
 import { getDB } from '../src/db/database.js';
+import { approvalRepo, artifactRepo, contentRepo, jobRepo } from '../src/db/repository.js';
+import { Orchestrator } from '../src/orchestrator/orchestrator.js';
+import { nowIso } from '../src/domain/types.js';
 
 describe('pipeline store', () => {
   it('seeds and reloads the default definition', () => {
@@ -81,5 +84,47 @@ describe('pipeline store', () => {
     expect(p.steps.find((s) => s.agent === 'assembly')).toBeDefined();
     expect(p.steps.find((s) => s.agent === 'render')).toBeDefined();
     expect(p.steps.find((s) => s.agent === 'publisher')).toBeDefined();
+  });
+});
+
+describe('approve gate transitions the gated job to COMPLETED', () => {
+  it('moving a WAITING_APPROVAL job to COMPLETED on approve (fixes stuck pending badge)', () => {
+    const pipelines = loadPipeline(DEFAULT_PIPELINE.id);
+    const contentId = 'content_approve_gate';
+    contentRepo.insert({
+      id: contentId, title: 'T', target_age: null, format: null, hook: null,
+      status: 'DIRECTED', current_version: 1, meta: '{}', channel_id: null,
+      created_at: nowIso(), updated_at: nowIso(),
+    });
+    jobRepo.insert({
+      id: 'job_approve_gate', content_id: contentId, pipeline_id: null, type: 'director',
+      agent_id: 'director', status: 'WAITING_APPROVAL', input: '{}', output: '{}',
+      parent_job: null, dependency: null, created_at: nowIso(), started_at: nowIso(),
+      completed_at: null, attempt: 1, max_retries: 3, error: null, model: null,
+      provider: null, tokens_in: 0, tokens_out: 0, cost_eur: 0, trace: '[]',
+    });
+    approvalRepo.insert({
+      id: 'appr_approve_gate', content_id: contentId, job_id: 'job_approve_gate', kind: 'plan',
+      status: 'PENDING', request_reason: null, decision: null, decided_at: null, created_at: nowIso(),
+    });
+    // The gated director produced a plan, so the next step (visual) can be
+    // materialized when the approval unblocks the pipeline.
+    artifactRepo.insert({
+      id: 'art_plan_gate', content_id: contentId, kind: 'production_plan', version: 1,
+      payload: '{}', source_job_id: 'job_approve_gate', created_at: nowIso(),
+    });
+
+    new Orchestrator().decideApproval(
+      { approvalId: 'appr_approve_gate', status: 'APPROVED', decision: 'ok' },
+      pipelines,
+    );
+
+    // The gated job must leave WAITING_APPROVAL, or the Control Center keeps
+    // showing the approval as pending forever even after the pipeline advances.
+    expect(jobRepo.get('job_approve_gate')!.status).toBe('COMPLETED');
+    expect(approvalRepo.get('appr_approve_gate')!.status).toBe('APPROVED');
+    // Approve unblocks the pipeline: the next step (visual) is materialized.
+    const visual = jobRepo.listByContent(contentId).find((j) => j.type === 'visual');
+    expect(visual).toBeDefined();
   });
 });
