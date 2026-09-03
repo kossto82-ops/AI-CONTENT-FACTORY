@@ -15,8 +15,12 @@ through a local **OmniRoute** gateway (`http://127.0.0.1:20128`).
 
 - **Node.js ≥ 20** (verified on Node 26). npm scripts use `npm.cmd` on Windows
   PowerShell (the `npm.ps1` shim is blocked by ExecutionPolicy Restricted).
-- No Docker, no Java, **no ffmpeg** — final video is composition DATA
-  (Decision D-14), not a muxed MP4. Nothing else to install.
+- **ffmpeg is OPTIONAL and now wired in Phase 13** — the pipeline gained a
+  `render` step (between Assembly and QA) that muxes a real 9:16 MP4
+  (`assets/{contentId}/assembly/final.mp4`) using `FFMPEG_PATH`. If the binary
+  is absent the render step fails loudly (missing-image check is upstream);
+  install/point `FFMPEG_PATH` to enable it. The rest of the assembly stays
+  composition DATA (Decision D-14).
 - SQLite via Node's built-in `node:sqlite` — no DB server, no native deps.
 - **OmniRoute must be running** on `http://127.0.0.1:20128` (API key
   `sk-omniroute-local`). Most of the pipeline works without it via stubs (see
@@ -86,8 +90,8 @@ npm run dev
 ## Health checks
 
 - Backend: `GET http://127.0.0.1:8787/api/dashboard` -> 200 JSON with job
-  counts. Also `GET /api/pipelines` shows the active 8-step pipeline
-  (…Assembly -> QA -> Publisher), and `GET /api/analytics` returns the
+  counts. Also `GET /api/pipelines` shows the active **9-step pipeline**
+  (…Assembly -> Render -> QA -> Publisher), and `GET /api/analytics` returns the
   internal KPI set (cost/tokens per agent, QA pass rate, publish + content
   status, mean pipeline duration) — analytic is cross-content, not a pipeline
   step.
@@ -130,6 +134,7 @@ npm run dev
 | `OMNIROUTE_TTS_STUB=1` | live | Use deterministic local WAV instead of live TTS. **REQUIRED for E2E**: the NVIDIA TTS NIM (`nvidia/fastpitch`) upstream is DOWN. |
 | `OMNIROUTE_VIDEO_STUB=1` | stub | Use deterministic animated-GIF clips. **Live veo/seedance is UNPROVEN** (all 4 models time out; see Troubleshooting). Set `=0` to try live. |
 | `OMNIROUTE_QA_STUB=1` | stub | QA Agent runs deterministic checks only (technical + plan-consistency); model/vision rows show as un-checked (`null`). **Live vision UNPROVEN** — OmniRoute :20128 down; set `=0` to try live plan review + vision review. |
+| `FFMPEG_PATH` | `ffmpeg` | Absolute path to the ffmpeg binary used by the Render Agent (muxes `final.mp4`). On this machine it points at `backend/bin/ffmpeg.exe` (a static Gyan build, gitignored). Unset → falls back to `ffmpeg` on PATH. |
 | _(Publisher)_ | determinist | Phase 9 Publisher needs **no gateway and no flag** — it derives a `publish_package` (metadata) locally. Publication is logical (`LocalExport`), no upload. Scheduling = a `scheduledAt` field, no runner. |
 | _(Analytics)_ | determinist | Phase 10 Analytics needs **no gateway and no flag** — `GET /api/analytics` aggregates internal KPIs deterministically (`computeAnalytics`, pure function). Not a pipeline step. |
 | _(Learning)_ | determinist | Phase 11 Learning needs **no gateway and no flag** — `GET /api/learning` derives lessons/ideas/recommendations deterministically (`computeLearning`, pure; D-19). Not a pipeline step; embeddings upgrade deferred. |
@@ -148,6 +153,7 @@ above. Reset the port first if a previous dev server still listens on :8787.
 | Dashboard shows "API offline" | Backend not running; start `npm run dev` in `backend/`. CORS is open (`*`). |
 | Voice job `OmniRoute audio error: 404` | TTS NIM down → set `OMNIROUTE_TTS_STUB=1`. |
 | Video/assembly clips are gray GIF bands | Stub mode (expected placeholder). Live modes time out — `veo-free/veo` >240s, other 3 models >150s each (2026-09-01). The live path fails cleanly after 120s, retryable. |
+| Render step fails `ffmpeg render failed` / `rendered 0 but produced no final.mp4` | `FFMPEG_PATH` not set or binary missing. Install a static ffmpeg (e.g. a Gyan build) at `backend/bin/` and set `FFMPEG_PATH` in `.env`. The MP4 lands at `assets/{contentId}/assembly/final.mp4` and is served at `/api/assets/{contentId}/assembly/final.mp4`. |
 | QA verdict shows `—` on Visual/Coherence/Appropriate rows | `OMNIROUTE_QA_STUB=1` (default): model-driven checks are skipped and left un-checked (`null`) — expected; deterministic rows are green. Set `=0` for live model review. |
 | Tests hit stale pipeline steps | Tests use in-memory DB (fixed); check `backend/data/*.db` for stale `pipeline_brain` — reconciled on load (missing steps auto-injected). |
 | Port 8787 busy after a crash | `Get-NetTCPConnection -LocalPort 8787 -State Listen` → kill owning PID. |
