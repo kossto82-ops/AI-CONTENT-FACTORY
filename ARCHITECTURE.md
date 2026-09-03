@@ -169,8 +169,9 @@ step is persisted and versioned before the next step reads it.
   Speech API (`POST /v1/audio/speech`, body `{model, input, voice, format}`)
   returning a raw audio body (`audio/wav` / `audio/mpeg`). Implemented as
   `gateway/audio.ts` (`callOmniRouteSpeech`).
-- Default model `nvidia/fastpitch`, default voice `Magpie-Multilingual.EN-US.Aria`,
-  default format `wav` (universal browser playback).
+- Default model `openai/gpt-4o-mini-tts`, default voice `alloy`, default format
+  `mp3` (what OmniRoute/OpenAI actually return); wired to your OmniRoute OpenAI
+  credentials. `nvidia/fastpitch` is NOT a supported speech provider.
 - The Voice Agent generates one narration clip per scene from the
   ProductionPlan's `narration` text, writes binaries to
   `backend/assets/{contentId}/audio/`, persists a JSON `voice` manifest
@@ -179,6 +180,30 @@ step is persisted and versioned before the next step reads it.
 - Offline dev mode `OMNIROUTE_TTS_STUB=1` returns a locally synthesized playable
   WAV (sine "voice") so the pipeline/file-write/serving path can be exercised
   when the TTS upstream is down; it is NOT live TTS.
+
+### 8.3 OmniRoute channel catalogue (authoritative route list)
+
+These are the Live API routes confirmed on the local OmniRoute gateway
+(`http://127.0.0.1:20128`, key in `OMNIROUTE_API_KEY`). Use `api-catalog-updater`
+/ `api-discovery` before coding against a new channel so we never guess contracts.
+
+| Route | Purpose | Body (shape) | Response | In repo |
+|---|---|---|---|---|
+| `POST /v1/chat/completions` | Text/chat (completion, reasoning, tool calls) | OpenAI `{model, messages}` | JSON | `gateway/omniroute.ts` |
+| `POST /v1/embeddings` | Text embedding vectors | `{model, input}` | JSON vectors | not yet |
+| `POST /v1/images/generations` | Image gen (base64 inline) | `{model, prompt, n, size}` | JSON `data[0].b64_json` | `gateway/image.ts` |
+| `POST /v1/images/edits` | Image editing (variation/inpaint) | image + prompt multipart | JSON | not yet |
+| `POST /v1/audio/transcriptions` | Speech-to-text (Whisper) | audio file | JSON text | not yet |
+| `POST /v1/audio/speech` | Text-to-speech (raw audio body) | `{model, input, voice, format}` | binary `audio/wav`\|`audio/mpeg` | `gateway/audio.ts` |
+| `POST /v1/music/generations` | Music generation | prompt / style | JSON | not yet |
+| `POST /v1/videos/generations` | Video gen (`{model, prompt, n, size}`) | JSON | binary/url | `gateway/video.ts` (stub, `OMNIROUTE_VIDEO_STUB`) |
+
+Notes:
+- Gateways recognize only a fixed set of **providers** per channel; a wrong
+  `provider/model` returns `400 "Invalid <channel> model … Use format: provider/model"`.
+- Channels whose provider lacks credentials return `400 "No credentials for provider: <x>"`.
+- Video (`veo` / `seedance`) and `gpt-image-1` are slow — expect 40-120s+ per
+  call; the pipeline should set long timeouts before they are used live.
 
 ## 9. Orchestration
 
