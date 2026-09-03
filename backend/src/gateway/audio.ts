@@ -55,12 +55,17 @@ function sniffAudioMime(bytes: Buffer): string {
   return 'audio/wav';
 }
 
-/** Default TTS model: NVIDIA FastPitch (low latency NVIDIA NIM TTS vocoder). */
-export const SPEECH_MODEL = 'nvidia/fastpitch';
-/** Default narrator voice available on the NVIDIA multilingual TTS NIM. */
-export const SPEECH_VOICE = 'Magpie-Multilingual.EN-US.Aria';
-/** Default output format (WAV plays everywhere in browsers). */
-export const SPEECH_FORMAT = 'wav';
+/**
+ * Default TTS model: OpenAI gpt-4o-mini-tts via the OmniRoute `/v1/audio/speech`
+ * channel. OmniRoute only recognizes a fixed set of speech providers
+ * (openai | elevenlabs | cartesia) and requires the provider to have
+ * credentials loaded — `nvidia/*` is NOT a supported speech provider.
+ */
+export const SPEECH_MODEL = 'openai/gpt-4o-mini-tts';
+/** Default narrator voice available on that model. */
+export const SPEECH_VOICE = 'alloy';
+/** Default output format (MP3: the format OmniRoute/OpenAI actually return). */
+export const SPEECH_FORMAT = 'mp3';
 
 /** Approx. chars per second of natural speech (used for duration estimate). */
 const CHARS_PER_SECOND = 15;

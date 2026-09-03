@@ -78,7 +78,7 @@ describe('voiceAgent', () => {
         synthesize: async ({ text, voice, format }) => {
           calls++;
           expect(voice).toBeTruthy();
-          expect(format).toBe('wav');
+          expect(format).toBe('mp3');
           expect(text.length).toBeGreaterThan(0);
           return { bytes: FAKE_WAV, mime: 'audio/wav', durationSeconds: 3, provider: 'omniroute' };
         },
