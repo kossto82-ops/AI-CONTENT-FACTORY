@@ -7,7 +7,10 @@ import type {
   ContentStatus,
   JobStatus,
 } from '../domain/types.js';
-import { nowIso } from '../domain/types.js';
+import { nowIso, newId } from '../domain/types.js';
+import type { ArtifactLifecycle } from '../contracts/artifact.js';
+import { isAtLeast } from '../contracts/artifact.js';
+import type { DecisionLogInput } from '../contracts/decisionLog.js';
 
 // ---------------- Schema-shaped row types ----------------
 
@@ -77,6 +80,26 @@ export interface ArtifactRow {
   version: number;
   payload: string;
   source_job_id: string | null;
+  created_at: string;
+  // Phase 3: provenance + lifecycle (present after migration v5; best-effort
+  // on pre-migration rows so legacy inserts/reads keep working).
+  lifecycle?: ArtifactLifecycle;
+  provider?: string | null;
+  model?: string | null;
+  seed?: number | null;
+  cost_eur?: number;
+  validation?: string | null; // JSON ArtifactValidation (serialized)
+}
+
+export interface DecisionLogRow {
+  id: string;
+  content_id: string | null;
+  stage: string | null;
+  category: string;
+  subject: string;
+  decision: string;
+  options_considered: string; // JSON string[]
+  rejected_because: string; // JSON string[]
   created_at: string;
 }
 
@@ -194,6 +217,26 @@ export function mapArtifact(r: SqlRow): ArtifactRow {
     version: Number(r.version),
     payload: String(r.payload),
     source_job_id: r.source_job_id == null ? null : String(r.source_job_id),
+    created_at: String(r.created_at),
+    lifecycle: (r.lifecycle as ArtifactLifecycle | undefined) ?? 'GENERATED',
+    provider: r.provider == null ? null : String(r.provider),
+    model: r.model == null ? null : String(r.model),
+    seed: r.seed == null ? null : Number(r.seed),
+    cost_eur: r.cost_eur == null ? 0 : Number(r.cost_eur),
+    validation: r.validation == null ? null : String(r.validation),
+  };
+}
+
+export function mapDecisionLog(r: SqlRow): DecisionLogRow {
+  return {
+    id: String(r.id),
+    content_id: r.content_id == null ? null : String(r.content_id),
+    stage: r.stage == null ? null : String(r.stage),
+    category: String(r.category),
+    subject: String(r.subject),
+    decision: String(r.decision),
+    options_considered: String(r.options_considered),
+    rejected_because: String(r.rejected_because),
     created_at: String(r.created_at),
   };
 }
@@ -438,10 +481,16 @@ export const artifactRepo = {
   insert(a: ArtifactRow): void {
     getDB()
       .prepare(
-        `INSERT INTO artifact (id, content_id, kind, version, payload, source_job_id, created_at)
-         VALUES (?,?,?,?,?,?,?)`,
+        `INSERT INTO artifact
+         (id, content_id, kind, version, payload, source_job_id, created_at,
+          lifecycle, provider, model, seed, cost_eur, validation)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
-      .run(a.id, a.content_id, a.kind, a.version, a.payload, a.source_job_id, a.created_at);
+      .run(
+        a.id, a.content_id, a.kind, a.version, a.payload, a.source_job_id, a.created_at,
+        a.lifecycle ?? 'GENERATED', a.provider ?? null, a.model ?? null, a.seed ?? null,
+        a.cost_eur ?? 0, a.validation ?? null,
+      );
   },
 
   latest(contentId: string, kind: string): ArtifactRow | undefined {
@@ -451,6 +500,89 @@ export const artifactRepo = {
       )
       .get(contentId, kind) as SqlRow | undefined;
     return r ? mapArtifact(r) : undefined;
+  },
+
+  /** All artifacts (highest version each) for a content id, newest first. */
+  listByContent(contentId: string): ArtifactRow[] {
+    return (getDB()
+      .prepare(
+        `SELECT a.* FROM artifact a
+         WHERE a.content_id=? AND a.version = (
+           SELECT MAX(a2.version) FROM artifact a2 WHERE a2.content_id=? AND a2.kind=a.kind
+         ) ORDER BY a.created_at`,
+      )
+      .all(contentId, contentId) as SqlRow[]).map(mapArtifact);
+  },
+
+  /**
+   * Advance an artifact's lifecycle phase (never regress). Returns the row.
+   * Throws if the artifact does not exist or the target is earlier than the
+   * current phase.
+   */
+  updateLifecycle(
+    contentId: string,
+    kind: string,
+    version: number,
+    lifecycle: ArtifactLifecycle,
+  ): ArtifactRow {
+    const [row] = this.listByContent(contentId).filter(
+      (a) => a.kind === kind && a.version === version,
+    );
+    if (!row) {
+      throw new Error(`Artifact not found: ${contentId}/${kind}#${version}`);
+    }
+    const current = row.lifecycle ?? 'GENERATED';
+    if (!isAtLeast(lifecycle, current)) {
+      throw new Error(
+        `Lifecycle regression rejected: ${current} -> ${lifecycle} for ${contentId}/${kind}#${version}`,
+      );
+    }
+    getDB()
+      .prepare('UPDATE artifact SET lifecycle=? WHERE content_id=? AND kind=? AND version=?')
+      .run(lifecycle, contentId, kind, version);
+    return mapArtifact(
+      getDB()
+        .prepare('SELECT * FROM artifact WHERE content_id=? AND kind=? AND version=?')
+        .get(contentId, kind, version) as SqlRow,
+    );
+  },
+};
+
+// ---------------- Decision Log Repository ----------------
+
+export const decisionLogRepo = {
+  insert(input: DecisionLogInput): void {
+    const id = input.id ?? newId('decision');
+    const createdAt = input.createdAt ?? nowIso();
+    getDB()
+      .prepare(
+        `INSERT INTO decision_log
+         (id, content_id, stage, category, subject, decision, options_considered,
+          rejected_because, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        id, input.contentId ?? null, input.stage ?? null, input.category, input.subject,
+        input.decision, JSON.stringify(input.optionsConsidered ?? []),
+        JSON.stringify(input.rejectedBecause ?? []), createdAt,
+      );
+  },
+
+  get(id: string): DecisionLogRow | undefined {
+    const r = getDB().prepare('SELECT * FROM decision_log WHERE id=?').get(id) as SqlRow | undefined;
+    return r ? mapDecisionLog(r) : undefined;
+  },
+
+  listByContent(contentId: string): DecisionLogRow[] {
+    return (getDB()
+      .prepare('SELECT * FROM decision_log WHERE content_id=? ORDER BY created_at')
+      .all(contentId) as SqlRow[]).map(mapDecisionLog);
+  },
+
+  listRecent(limit = 50): DecisionLogRow[] {
+    return (getDB()
+      .prepare('SELECT * FROM decision_log ORDER BY created_at DESC LIMIT ?')
+      .all(limit) as SqlRow[]).map(mapDecisionLog);
   },
 };
 

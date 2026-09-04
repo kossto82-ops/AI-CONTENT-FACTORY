@@ -646,6 +646,11 @@ export class Orchestrator {
       payload: JSON.stringify(data),
       source_job_id: job.id,
       created_at: nowIso(),
+      // Phase 3 provenance: record the producing job's model/provider/cost so
+      // fake vs real output is distinguishable and cost roll-up is auditable.
+      model: job.model,
+      provider: job.provider,
+      cost_eur: job.cost_eur,
     });
   }
 

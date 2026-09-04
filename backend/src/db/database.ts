@@ -186,6 +186,31 @@ CREATE TABLE IF NOT EXISTS channel (
 ALTER TABLE content ADD COLUMN channel_id TEXT;
 `,
   },
+  {
+    version: 5,
+    up: `
+-- Phase 3: artifact provenance + lifecycle (honest media output state).
+ALTER TABLE artifact ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'GENERATED';
+ALTER TABLE artifact ADD COLUMN provider TEXT;
+ALTER TABLE artifact ADD COLUMN model TEXT;
+ALTER TABLE artifact ADD COLUMN seed INTEGER;
+ALTER TABLE artifact ADD COLUMN cost_eur REAL NOT NULL DEFAULT 0.0;
+ALTER TABLE artifact ADD COLUMN validation TEXT;   -- JSON ArtifactValidation
+
+-- Phase 3: append-only decision log (provider/runtime/budget/... choices).
+CREATE TABLE IF NOT EXISTS decision_log (
+  id            TEXT PRIMARY KEY,
+  content_id    TEXT,
+  stage         TEXT,
+  category      TEXT NOT NULL,   -- provider_selection|model_selection|...
+  subject       TEXT NOT NULL,
+  decision      TEXT NOT NULL,
+  options_considered TEXT NOT NULL DEFAULT '[]',  -- JSON string[]
+  rejected_because   TEXT NOT NULL DEFAULT '[]',  -- JSON string[]
+  created_at    TEXT NOT NULL
+);
+`,
+  },
 ];
 
 /** Insert the seeded default channel into an already-migrated DB (idempotent). */
