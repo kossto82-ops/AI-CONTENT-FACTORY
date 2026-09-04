@@ -2,6 +2,12 @@ import { getDB } from './db/database.js';
 import { nowIso } from './domain/types.js';
 import { DEFAULT_PIPELINE, type PipelineDefinition, type PipelineStep } from './pipeline.js';
 import type { AgentMode, ApprovalKind } from './domain/types.js';
+import {
+  buildPipelineManifest,
+  validatePipelineDefinition,
+  type OrchestrationMeta,
+  type PipelineManifest,
+} from './contracts/pipelineManifest.js';
 
 /**
  * Persistent pipeline store (Decision D-10 "pipelines as data"). The active
@@ -21,6 +27,10 @@ interface PipelineConfig {
 }
 
 const DEFINITION_KEY = 'steps';
+
+// Fail fast if the canonical default pipeline drifts from the manifest schema.
+// Any code change that introduces an invalid step/agent/mode is caught at load.
+validatePipelineDefinition(DEFAULT_PIPELINE);
 
 /**
  * Merge a stored definition into the canonical default: keep operator
@@ -94,6 +104,21 @@ export function loadPipeline(id: string = DEFAULT_PIPELINE.id): PipelineDefiniti
     }
   }
   return result;
+}
+
+/**
+ * Load the active pipeline as a schema-validated manifest. Every stored
+ * definition inflates to a valid manifest (defaults filled in), so Existing
+ * pipelines remain valid. Validation catches drift in cases where a stored
+ * definition violates the manifest schema (unknown agent, bad mode, ...).
+ */
+export function loadPipelineManifest(opts?: {
+  id?: string;
+  meta?: Partial<OrchestrationMeta>;
+}): PipelineManifest {
+  const definition = loadPipeline(opts?.id);
+  validatePipelineDefinition(definition);
+  return buildPipelineManifest(definition, opts?.meta);
 }
 
 /** List all stored pipeline headers (no full definitions). */
